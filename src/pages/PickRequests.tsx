@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ScanBarcode, CheckCircle, Package } from "lucide-react";
+import { Plus, ScanBarcode, CheckCircle, Package, AlertTriangle, RotateCcw } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { getFEFOPickingSuggestion, type FEFOSuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -17,6 +19,7 @@ const statusMap: Record<string, { cls: string; label: string }> = {
   PICKING: { cls: "bg-info/10 text-info border-info/30", label: "Picking" },
   COMPLETED: { cls: "bg-success/10 text-success border-success/30", label: "Completed" },
   CANCELLED: { cls: "bg-destructive/10 text-destructive border-destructive/30", label: "Cancelled" },
+  PARTIAL: { cls: "bg-accent/10 text-accent-foreground border-accent/30", label: "Partial" },
 };
 
 const PickRequests = () => {
@@ -31,6 +34,11 @@ const PickRequests = () => {
   const [pickingId, setPickingId] = useState<string | null>(null);
   const [pickLines, setPickLines] = useState<any[]>([]);
   const [scanInput, setScanInput] = useState("");
+  const [exceptionLine, setExceptionLine] = useState<any>(null);
+  const [exceptionType, setExceptionType] = useState("REVIEW");
+  const [exceptionReason, setExceptionReason] = useState("");
+  const [showExceptions, setShowExceptions] = useState(false);
+  const [scannedLineIds, setScannedLineIds] = useState<Set<string>>(new Set());
 
   const { data: picks } = useQuery({
     queryKey: ["pick-requests"],
@@ -118,29 +126,50 @@ const PickRequests = () => {
 
   const handleScanBatch = async () => {
     if (!scanInput || !pickingId) return;
-    const line = pickLines.find((l: any) =>
-      l.inventory_batches?.batch_number === scanInput && l.picked_quantity < l.allocated_quantity
-    );
-    if (!line) {
-      toast.error(`Batch ${scanInput} not found in pick or already fully picked.`);
+    // Block wrong batch (not in pick at all)
+    const anyMatch = pickLines.find((l: any) => l.inventory_batches?.batch_number === scanInput);
+    if (!anyMatch) {
+      toast.error(`Batch ${scanInput} is not part of this pick request.`);
       setScanInput("");
       return;
     }
-    const newPickedQty = line.allocated_quantity; // pick entire allocation
+    // Block duplicate scans
+    const alreadyScanned = pickLines.find((l: any) =>
+      l.inventory_batches?.batch_number === scanInput && scannedLineIds.has(l.id)
+    );
+    if (alreadyScanned) {
+      toast.error(`Batch ${scanInput} already scanned.`);
+      setScanInput("");
+      return;
+    }
+    const line = pickLines.find((l: any) =>
+      l.inventory_batches?.batch_number === scanInput && l.picked_quantity < l.allocated_quantity && !scannedLineIds.has(l.id)
+    );
+    if (!line) {
+      toast.error(`Batch ${scanInput} already fully picked.`);
+      setScanInput("");
+      return;
+    }
+    // Check actual available stock for partial pick support
+    const { data: batch } = await supabase.from("inventory_batches").select("quantity").eq("id", line.batch_id).single();
+    const available = batch?.quantity ?? 0;
+    const newPickedQty = Math.min(line.allocated_quantity, available);
+    if (newPickedQty === 0) {
+      toast.warning(`Batch ${scanInput} has 0 stock. Use Exception to flag it.`);
+      setScanInput("");
+      return;
+    }
     await supabase.from("pick_request_lines").update({
       picked_quantity: newPickedQty,
       scanned_at: new Date().toISOString(),
     }).eq("id", line.id);
 
     // Deduct from inventory batch
-    const { data: batch } = await supabase.from("inventory_batches").select("quantity").eq("id", line.batch_id).single();
-    if (batch) {
-      const remaining = batch.quantity - newPickedQty;
-      await supabase.from("inventory_batches").update({
-        quantity: remaining <= 0 ? 0 : remaining,
-        status: remaining <= 0 ? "DEPLETED" : "AVAILABLE",
-      }).eq("id", line.batch_id);
-    }
+    const remaining = available - newPickedQty;
+    await supabase.from("inventory_batches").update({
+      quantity: remaining <= 0 ? 0 : remaining,
+      status: remaining <= 0 ? "DEPLETED" : "AVAILABLE",
+    }).eq("id", line.batch_id);
 
     // Log FEFO allocation
     await supabase.from("fefo_allocation_log").insert({
@@ -159,26 +188,72 @@ const PickRequests = () => {
       .eq("pick_request_id", pickingId)
       .order("created_at");
     setPickLines(updatedLines ?? []);
+    setScannedLineIds(prev => new Set(prev).add(line.id));
     setScanInput("");
-    toast.success(`Scanned batch ${scanInput} — ${newPickedQty} units picked from ${line.location_type}`);
+    const partialNote = newPickedQty < line.allocated_quantity ? ` (partial: ${newPickedQty}/${line.allocated_quantity})` : "";
+    toast.success(`Scanned batch ${scanInput} — ${newPickedQty} units from ${line.location_type}${partialNote}`);
   };
 
   const handleCompletePick = async () => {
     if (!pickingId) return;
     const totalPicked = pickLines.reduce((s: number, l: any) => s + (l.picked_quantity || 0), 0);
+    const totalAlloc = pickLines.reduce((s: number, l: any) => s + l.allocated_quantity, 0);
+    const isPartial = totalPicked < totalAlloc;
     await supabase.from("pick_requests").update({
-      status: "COMPLETED",
+      status: isPartial ? "PARTIAL" : "COMPLETED",
       fulfilled_quantity: totalPicked,
       completed_at: new Date().toISOString(),
     }).eq("id", pickingId);
-    toast.success("Pick completed!");
+    toast.success(isPartial ? `Partial pick — ${totalPicked}/${totalAlloc} fulfilled.` : "Pick completed!");
     setPickingId(null);
     setPickLines([]);
+    setScannedLineIds(new Set());
     queryClient.invalidateQueries({ queryKey: ["pick-requests"] });
     queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
   };
 
-  const allScanned = pickLines.length > 0 && pickLines.every((l: any) => l.picked_quantity >= l.allocated_quantity);
+  const canComplete = scannedLineIds.size > 0;
+  const totalPicked = pickLines.reduce((s: number, l: any) => s + (l.picked_quantity || 0), 0);
+  const totalAllocated = pickLines.reduce((s: number, l: any) => s + l.allocated_quantity, 0);
+
+  const handleRaiseException = async () => {
+    if (!exceptionLine || !pickingId || !exceptionReason) return;
+    await supabase.from("pick_exceptions").insert({
+      pick_request_id: pickingId,
+      original_line_id: exceptionLine.id,
+      batch_id: exceptionLine.batch_id,
+      exception_type: exceptionType,
+      reason: exceptionReason,
+      status: "OPEN",
+      created_by: user?.id,
+    });
+    await supabase.from("pick_request_lines").update({ picked_quantity: 0, scanned_at: new Date().toISOString() }).eq("id", exceptionLine.id);
+    setScannedLineIds(prev => new Set(prev).add(exceptionLine.id));
+    const { data: updatedLines } = await supabase
+      .from("pick_request_lines")
+      .select("*, inventory_batches:batch_id(batch_number, location, expiry_date)")
+      .eq("pick_request_id", pickingId)
+      .order("created_at");
+    setPickLines(updatedLines ?? []);
+    setExceptionLine(null);
+    setExceptionReason("");
+    toast.success(`Exception raised — ${exceptionType}`);
+    queryClient.invalidateQueries({ queryKey: ["pick-exceptions", pickingId] });
+  };
+
+  const { data: exceptions } = useQuery({
+    queryKey: ["pick-exceptions", pickingId],
+    queryFn: async () => {
+      if (!pickingId) return [];
+      const { data } = await supabase
+        .from("pick_exceptions")
+        .select("*, inventory_batches:batch_id(batch_number)")
+        .eq("pick_request_id", pickingId)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!pickingId,
+  });
 
   return (
     <>
@@ -205,10 +280,14 @@ const PickRequests = () => {
           </div>
           <div className="space-y-2">
             {pickLines.map((l: any) => (
-              <div key={l.id} className={`flex items-center justify-between p-3 rounded-lg border ${l.picked_quantity >= l.allocated_quantity ? "border-success/30 bg-success/5" : "border-border"}`}>
+              <div key={l.id} className={`flex items-center justify-between p-3 rounded-lg border ${l.picked_quantity >= l.allocated_quantity ? "border-success/30 bg-success/5" : l.picked_quantity > 0 ? "border-warning/30 bg-warning/5" : scannedLineIds.has(l.id) ? "border-destructive/30 bg-destructive/5" : "border-border"}`}>
                 <div className="flex items-center gap-3">
                   {l.picked_quantity >= l.allocated_quantity ? (
                     <CheckCircle className="h-5 w-5 text-success" />
+                  ) : l.picked_quantity > 0 ? (
+                    <AlertTriangle className="h-5 w-5 text-warning" />
+                  ) : scannedLineIds.has(l.id) ? (
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
                   ) : (
                     <Package className="h-5 w-5 text-muted-foreground" />
                   )}
@@ -221,17 +300,77 @@ const PickRequests = () => {
                 <div className="text-sm font-mono tabular-nums">
                   {l.picked_quantity}/{l.allocated_quantity}
                 </div>
+                {!scannedLineIds.has(l.id) && l.picked_quantity < l.allocated_quantity && (
+                  <Button variant="ghost" size="sm" className="text-xs h-7 text-warning" onClick={() => setExceptionLine(l)}>
+                    <AlertTriangle className="h-3 w-3 mr-1" /> Exception
+                  </Button>
+                )}
               </div>
             ))}
           </div>
           <div className="flex gap-2">
-            <Button onClick={handleCompletePick} disabled={!allScanned} className="flex-1">
-              {allScanned ? "Complete Pick" : "Scan all batches to complete"}
+            <Button onClick={handleCompletePick} disabled={!canComplete} className="flex-1">
+              {canComplete
+                ? totalPicked < totalAllocated
+                  ? `Complete Partial Pick (${totalPicked}/${totalAllocated})`
+                  : "Complete Pick"
+                : "Scan at least one batch to complete"}
             </Button>
-            <Button variant="outline" onClick={() => { setPickingId(null); setPickLines([]); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setPickingId(null); setPickLines([]); setScannedLineIds(new Set()); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => setShowExceptions(!showExceptions)}>
+              <AlertTriangle className="h-4 w-4 mr-1" /> Exceptions {exceptions?.length ? `(${exceptions.length})` : ""}
+            </Button>
           </div>
+          {showExceptions && (exceptions ?? []).length > 0 && (
+            <div className="space-y-2 mt-3">
+              <h4 className="text-sm font-semibold text-muted-foreground">Pick Exceptions</h4>
+              {(exceptions ?? []).map((ex: any) => (
+                <div key={ex.id} className="flex items-center justify-between p-3 rounded-lg border border-warning/30 bg-warning/5">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30">{ex.exception_type}</Badge>
+                    <span className="font-mono text-xs">{ex.inventory_batches?.batch_number || "—"}</span>
+                    <span className="text-xs text-muted-foreground">{ex.reason}</span>
+                  </div>
+                  <Badge variant="outline" className={ex.status === "OPEN" ? "bg-destructive/10 text-destructive" : "bg-success/10 text-success"}>{ex.status}</Badge>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Exception dialog */}
+      <Dialog open={!!exceptionLine} onOpenChange={(open) => !open && setExceptionLine(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Raise Pick Exception</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Batch: <span className="font-mono font-semibold">{exceptionLine?.inventory_batches?.batch_number}</span>
+            </p>
+            <div className="space-y-2">
+              <Label>Exception Type</Label>
+              <Select value={exceptionType} onValueChange={setExceptionType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="QUARANTINE">Quarantine — QC blocked</SelectItem>
+                  <SelectItem value="REVIEW">Review — needs inspection</SelectItem>
+                  <SelectItem value="VOID">Void — damaged / unusable</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Textarea value={exceptionReason} onChange={(e) => setExceptionReason(e.target.value)} placeholder="Describe the issue…" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExceptionLine(null)}>Cancel</Button>
+            <Button onClick={handleRaiseException} disabled={!exceptionReason}>Raise Exception</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New pick form */}
       {showNew && !pickingId && (
@@ -324,6 +463,11 @@ const PickRequests = () => {
                     {p.status === "PENDING" && (
                       <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleStartPicking(p.id)}>
                         Start Picking
+                      </Button>
+                    )}
+                    {p.status === "PARTIAL" && (
+                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleStartPicking(p.id)}>
+                        <RotateCcw className="h-3 w-3 mr-1" /> Resume
                       </Button>
                     )}
                   </td>
