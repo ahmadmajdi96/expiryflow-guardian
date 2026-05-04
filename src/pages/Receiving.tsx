@@ -105,8 +105,8 @@ const Receiving = () => {
         qc_status: "PASSED",
         po_line_id: selectedLine.id,
         received_by: user?.id,
-        label_image_url: labelImageUrl,
-      });
+        ...(labelImageUrl ? { label_image_url: labelImageUrl } : {}),
+      } as any);
 
       // Update PO line received qty
       await supabase.from("po_lines").update({
