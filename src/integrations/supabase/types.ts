@@ -14,7 +14,401 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alert_thresholds: {
+        Row: {
+          action_description: string | null
+          category: string | null
+          created_at: string
+          id: string
+          max_days: number | null
+          min_days: number
+          product_id: string | null
+          zone_name: string
+        }
+        Insert: {
+          action_description?: string | null
+          category?: string | null
+          created_at?: string
+          id?: string
+          max_days?: number | null
+          min_days: number
+          product_id?: string | null
+          zone_name: string
+        }
+        Update: {
+          action_description?: string | null
+          category?: string | null
+          created_at?: string
+          id?: string
+          max_days?: number | null
+          min_days?: number
+          product_id?: string | null
+          zone_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_thresholds_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expiry_alerts: {
+        Row: {
+          action_taken: string | null
+          alert_id: string
+          batch_id: string
+          created_at: string
+          days_until_expiry: number
+          id: string
+          resolved: boolean
+          resolved_at: string | null
+          triggered_at: string
+          zone: string
+        }
+        Insert: {
+          action_taken?: string | null
+          alert_id: string
+          batch_id: string
+          created_at?: string
+          days_until_expiry: number
+          id?: string
+          resolved?: boolean
+          resolved_at?: string | null
+          triggered_at?: string
+          zone: string
+        }
+        Update: {
+          action_taken?: string | null
+          alert_id?: string
+          batch_id?: string
+          created_at?: string
+          days_until_expiry?: number
+          id?: string
+          resolved?: boolean
+          resolved_at?: string | null
+          triggered_at?: string
+          zone?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expiry_alerts_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_batches: {
+        Row: {
+          batch_number: string
+          created_at: string
+          expiry_date: string
+          id: string
+          location: string | null
+          manufacturing_date: string | null
+          po_line_id: string | null
+          product_id: string
+          qc_status: string
+          quantity: number
+          received_at: string | null
+          received_by: string | null
+          status: string
+          store_id: string
+        }
+        Insert: {
+          batch_number: string
+          created_at?: string
+          expiry_date: string
+          id?: string
+          location?: string | null
+          manufacturing_date?: string | null
+          po_line_id?: string | null
+          product_id: string
+          qc_status?: string
+          quantity?: number
+          received_at?: string | null
+          received_by?: string | null
+          status?: string
+          store_id: string
+        }
+        Update: {
+          batch_number?: string
+          created_at?: string
+          expiry_date?: string
+          id?: string
+          location?: string | null
+          manufacturing_date?: string | null
+          po_line_id?: string | null
+          product_id?: string
+          qc_status?: string
+          quantity?: number
+          received_at?: string | null
+          received_by?: string | null
+          status?: string
+          store_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_batches_po_line_id_fkey"
+            columns: ["po_line_id"]
+            isOneToOne: false
+            referencedRelation: "po_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_batches_store_id_fkey"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      po_lines: {
+        Row: {
+          created_at: string
+          id: string
+          po_id: string
+          product_id: string
+          quantity_ordered: number
+          quantity_received: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          po_id: string
+          product_id: string
+          quantity_ordered: number
+          quantity_received?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          po_id?: string
+          product_id?: string
+          quantity_ordered?: number
+          quantity_received?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "po_lines_po_id_fkey"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "po_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          category: string | null
+          created_at: string
+          current_price: number | null
+          expiry_trackable: boolean
+          id: string
+          name: string
+          shelf_life_days: number | null
+          sku: string
+          unit_cost: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          current_price?: number | null
+          expiry_trackable?: boolean
+          id?: string
+          name: string
+          shelf_life_days?: number | null
+          sku: string
+          unit_cost?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          current_price?: number | null
+          expiry_trackable?: boolean
+          id?: string
+          name?: string
+          shelf_life_days?: number | null
+          sku?: string
+          unit_cost?: number | null
+        }
+        Relationships: []
+      }
+      purchase_orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expected_delivery_date: string | null
+          id: string
+          po_number: string
+          status: string
+          supplier_id: string
+          supplier_name: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expected_delivery_date?: string | null
+          id?: string
+          po_number: string
+          status?: string
+          supplier_id: string
+          supplier_name?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expected_delivery_date?: string | null
+          id?: string
+          po_number?: string
+          status?: string
+          supplier_id?: string
+          supplier_name?: string | null
+        }
+        Relationships: []
+      }
+      qc_inspections: {
+        Row: {
+          batch_id: string
+          created_at: string
+          id: string
+          inspected_at: string | null
+          inspector_id: string | null
+          notes: string | null
+          result: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          id?: string
+          inspected_at?: string | null
+          inspector_id?: string | null
+          notes?: string | null
+          result?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          id?: string
+          inspected_at?: string | null
+          inspector_id?: string | null
+          notes?: string | null
+          result?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qc_inspections_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stock_transfers: {
+        Row: {
+          batch_id: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          from_store_id: string
+          id: string
+          quantity: number
+          status: string
+          to_store_id: string
+          transfer_code: string
+        }
+        Insert: {
+          batch_id: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          from_store_id: string
+          id?: string
+          quantity: number
+          status?: string
+          to_store_id: string
+          transfer_code: string
+        }
+        Update: {
+          batch_id?: string
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          from_store_id?: string
+          id?: string
+          quantity?: number
+          status?: string
+          to_store_id?: string
+          transfer_code?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_transfers_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transfers_from_store_id_fkey"
+            columns: ["from_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_transfers_to_store_id_fkey"
+            columns: ["to_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stores: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          name: string
+          store_code: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          store_code: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          store_code?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
