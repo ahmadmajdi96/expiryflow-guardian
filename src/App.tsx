@@ -14,6 +14,7 @@ import Quarantine from "./pages/Quarantine";
 import Transfers from "./pages/Transfers";
 import AlertSettings from "./pages/AlertSettings";
 import MarkdownApprovals from "./pages/MarkdownApprovals";
+import BatchDetails from "./pages/BatchDetails";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/quarantine" element={<Wrap><Quarantine /></Wrap>} />
             <Route path="/transfers" element={<Wrap><Transfers /></Wrap>} />
             <Route path="/markdown-approvals" element={<Wrap><MarkdownApprovals /></Wrap>} />
+            <Route path="/batch/:id" element={<Wrap><BatchDetails /></Wrap>} />
             <Route path="/settings" element={<Wrap><AlertSettings /></Wrap>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
