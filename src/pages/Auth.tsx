@@ -63,7 +63,7 @@ const Auth = () => {
         // Assign role after first sign-in
         const { data: { user: newUser } } = await supabase.auth.getUser();
         if (newUser) {
-          await supabase.from("user_roles").upsert({ user_id: newUser.id, role: account.role }, { onConflict: "user_id,role" });
+          await supabase.from("user_roles").insert({ user_id: newUser.id, role: account.role as any });
         }
       }
     }
