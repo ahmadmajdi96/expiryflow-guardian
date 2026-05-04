@@ -265,6 +265,57 @@ export type Database = {
         }
         Relationships: []
       }
+      pick_exceptions: {
+        Row: {
+          batch_id: string
+          created_at: string
+          created_by: string | null
+          exception_type: string
+          id: string
+          original_line_id: string
+          pick_request_id: string
+          reallocated_batch_id: string | null
+          reallocated_quantity: number | null
+          reason: string | null
+          resolution: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          status: string
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          created_by?: string | null
+          exception_type?: string
+          id?: string
+          original_line_id: string
+          pick_request_id: string
+          reallocated_batch_id?: string | null
+          reallocated_quantity?: number | null
+          reason?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          created_by?: string | null
+          exception_type?: string
+          id?: string
+          original_line_id?: string
+          pick_request_id?: string
+          reallocated_batch_id?: string | null
+          reallocated_quantity?: number | null
+          reason?: string | null
+          resolution?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       pick_request_lines: {
         Row: {
           allocated_quantity: number
