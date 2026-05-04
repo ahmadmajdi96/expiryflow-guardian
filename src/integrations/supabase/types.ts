@@ -102,6 +102,39 @@ export type Database = {
           },
         ]
       }
+      fefo_allocation_log: {
+        Row: {
+          allocated_by: string | null
+          allocation_type: string
+          batch_id: string
+          created_at: string
+          id: string
+          location_code: string
+          location_type: string
+          quantity: number
+        }
+        Insert: {
+          allocated_by?: string | null
+          allocation_type: string
+          batch_id: string
+          created_at?: string
+          id?: string
+          location_code: string
+          location_type: string
+          quantity?: number
+        }
+        Update: {
+          allocated_by?: string | null
+          allocation_type?: string
+          batch_id?: string
+          created_at?: string
+          id?: string
+          location_code?: string
+          location_type?: string
+          quantity?: number
+        }
+        Relationships: []
+      }
       inventory_batches: {
         Row: {
           batch_number: string
@@ -174,6 +207,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      markdown_proposals: {
+        Row: {
+          alert_id: string | null
+          applied_at: string | null
+          batch_id: string
+          batch_number: string
+          created_at: string
+          current_price: number
+          discount_percent: number
+          id: string
+          proposed_price: number
+          reasoning: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          sku: string
+          status: string
+          urgency: string
+        }
+        Insert: {
+          alert_id?: string | null
+          applied_at?: string | null
+          batch_id: string
+          batch_number: string
+          created_at?: string
+          current_price: number
+          discount_percent: number
+          id?: string
+          proposed_price: number
+          reasoning?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          sku: string
+          status?: string
+          urgency?: string
+        }
+        Update: {
+          alert_id?: string | null
+          applied_at?: string | null
+          batch_id?: string
+          batch_number?: string
+          created_at?: string
+          current_price?: number
+          discount_percent?: number
+          id?: string
+          proposed_price?: number
+          reasoning?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          sku?: string
+          status?: string
+          urgency?: string
+        }
+        Relationships: []
       }
       po_lines: {
         Row: {
@@ -409,15 +499,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "warehouse_clerk" | "qc_inspector" | "store_manager" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -544,6 +661,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["warehouse_clerk", "qc_inspector", "store_manager", "admin"],
+    },
   },
 } as const
