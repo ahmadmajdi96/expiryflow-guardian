@@ -265,6 +265,89 @@ export type Database = {
         }
         Relationships: []
       }
+      pick_request_lines: {
+        Row: {
+          allocated_quantity: number
+          batch_id: string
+          created_at: string
+          id: string
+          location_code: string | null
+          location_type: string
+          pick_request_id: string
+          picked_quantity: number
+          scanned_at: string | null
+        }
+        Insert: {
+          allocated_quantity: number
+          batch_id: string
+          created_at?: string
+          id?: string
+          location_code?: string | null
+          location_type?: string
+          pick_request_id: string
+          picked_quantity?: number
+          scanned_at?: string | null
+        }
+        Update: {
+          allocated_quantity?: number
+          batch_id?: string
+          created_at?: string
+          id?: string
+          location_code?: string | null
+          location_type?: string
+          pick_request_id?: string
+          picked_quantity?: number
+          scanned_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pick_request_lines_pick_request_id_fkey"
+            columns: ["pick_request_id"]
+            isOneToOne: false
+            referencedRelation: "pick_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pick_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          fulfilled_quantity: number
+          id: string
+          pick_code: string
+          product_id: string
+          requested_by: string | null
+          requested_quantity: number
+          status: string
+          store_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          fulfilled_quantity?: number
+          id?: string
+          pick_code: string
+          product_id: string
+          requested_by?: string | null
+          requested_quantity: number
+          status?: string
+          store_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          fulfilled_quantity?: number
+          id?: string
+          pick_code?: string
+          product_id?: string
+          requested_by?: string | null
+          requested_quantity?: number
+          status?: string
+          store_id?: string
+        }
+        Relationships: []
+      }
       po_lines: {
         Row: {
           created_at: string
@@ -517,6 +600,42 @@ export type Database = {
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
+        }
+        Relationships: []
+      }
+      webhook_event_log: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          payload: Json
+          po_number: string | null
+          processed_at: string
+          sku: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          payload?: Json
+          po_number?: string | null
+          processed_at?: string
+          sku?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          payload?: Json
+          po_number?: string | null
+          processed_at?: string
+          sku?: string | null
+          status?: string
         }
         Relationships: []
       }
