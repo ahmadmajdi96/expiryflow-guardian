@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Check, X, Tag } from "lucide-react";
+import { Check, X, Tag, CheckCheck, Filter } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 const urgencyColor: Record<string, string> = {
@@ -29,6 +30,8 @@ const MarkdownApprovals = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [adjustedPrice, setAdjustedPrice] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState("pending");
+  const [bulkSelected, setBulkSelected] = useState<string[]>([]);
 
   const { data: proposals, isLoading } = useQuery({
     queryKey: ["markdown-proposals"],
@@ -41,6 +44,12 @@ const MarkdownApprovals = () => {
       return data;
     },
   });
+
+  const filtered = (proposals ?? []).filter((p) => statusFilter === "all" || p.status === statusFilter);
+
+  const toggleBulk = useCallback((id: string) => {
+    setBulkSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }, []);
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, status, notes, price }: { id: string; status: string; notes: string; price?: number }) => {
@@ -65,13 +74,33 @@ const MarkdownApprovals = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const bulkMutation = useMutation({
+    mutationFn: async ({ ids, status }: { ids: string[]; status: string }) => {
+      for (const id of ids) {
+        const update: any = {
+          status,
+          reviewed_by: user?.id,
+          reviewed_at: new Date().toISOString(),
+        };
+        if (status === "applied") update.applied_at = new Date().toISOString();
+        await supabase.from("markdown_proposals").update(update).eq("id", id);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["markdown-proposals"] });
+      setBulkSelected([]);
+      toast.success("Bulk action completed");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const selected = proposals?.find((p) => p.id === selectedId);
 
   return (
     <>
       <PageHeader
         title="Markdown Approvals"
-        description="Review and approve AI-generated pricing proposals before they are applied to the system."
+        description="Review, approve, and apply AI-generated pricing proposals. Bulk approve or reject multiple proposals at once."
         badge={
           <Badge variant="outline" className="text-xs">
             {proposals?.filter((p) => p.status === "pending").length ?? 0} pending
@@ -81,8 +110,53 @@ const MarkdownApprovals = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 page-section">
-          <div className="px-5 py-4 border-b border-border">
+          <div className="px-5 py-4 border-b border-border flex items-center justify-between">
             <h2 className="font-semibold">Proposals</h2>
+            <div className="flex items-center gap-2">
+              {bulkSelected.length > 0 && statusFilter === "pending" && (
+                <>
+                  <Button
+                    size="sm"
+                    className="text-xs h-7 bg-success hover:bg-success/90 text-success-foreground"
+                    onClick={() => bulkMutation.mutate({ ids: bulkSelected, status: "approved" })}
+                    disabled={bulkMutation.isPending}
+                  >
+                    <CheckCheck className="h-3.5 w-3.5 mr-1" /> Approve {bulkSelected.length}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="text-xs h-7"
+                    onClick={() => bulkMutation.mutate({ ids: bulkSelected, status: "rejected" })}
+                    disabled={bulkMutation.isPending}
+                  >
+                    <X className="h-3.5 w-3.5 mr-1" /> Reject {bulkSelected.length}
+                  </Button>
+                </>
+              )}
+              {bulkSelected.length > 0 && statusFilter === "approved" && (
+                <Button
+                  size="sm"
+                  className="text-xs h-7"
+                  onClick={() => bulkMutation.mutate({ ids: bulkSelected, status: "applied" })}
+                  disabled={bulkMutation.isPending}
+                >
+                  <Check className="h-3.5 w-3.5 mr-1" /> Apply {bulkSelected.length}
+                </Button>
+              )}
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setBulkSelected([]); }}>
+                <SelectTrigger className="w-32 h-7 text-xs">
+                  <Filter className="h-3 w-3 mr-1" /><SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="approved">Approved</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="applied">Applied</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Loading…</div>
@@ -93,6 +167,7 @@ const MarkdownApprovals = () => {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">
+                    <th className="px-5 py-3 w-10"></th>
                     <th className="px-5 py-3 font-medium text-muted-foreground">SKU</th>
                     <th className="px-5 py-3 font-medium text-muted-foreground">Batch</th>
                     <th className="px-5 py-3 font-medium text-muted-foreground text-right">Current</th>
@@ -104,8 +179,16 @@ const MarkdownApprovals = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {proposals.map((p) => (
+                  {filtered.map((p) => (
                     <tr key={p.id} className={`table-row-hover border-b border-border/50 ${selectedId === p.id ? "bg-primary/5" : ""}`}>
+                      <td className="px-5 py-3">
+                        <input
+                          type="checkbox"
+                          checked={bulkSelected.includes(p.id)}
+                          onChange={() => toggleBulk(p.id)}
+                          className="rounded border-border"
+                        />
+                      </td>
                       <td className="px-5 py-3 font-mono text-xs">{p.sku}</td>
                       <td className="px-5 py-3 font-mono text-xs">{p.batch_number}</td>
                       <td className="px-5 py-3 text-right tabular-nums">${Number(p.current_price).toFixed(2)}</td>
@@ -118,11 +201,15 @@ const MarkdownApprovals = () => {
                         <Badge variant="outline" className={statusColor[p.status] || ""}>{p.status}</Badge>
                       </td>
                       <td className="px-5 py-3">
-                        {p.status === "pending" && (
+                        {p.status === "pending" ? (
                           <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => { setSelectedId(p.id); setAdjustedPrice(String(p.proposed_price)); }}>
                             Review
                           </Button>
-                        )}
+                        ) : p.status === "approved" ? (
+                          <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => { setSelectedId(p.id); setAdjustedPrice(String(p.proposed_price)); }}>
+                            Apply
+                          </Button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -172,7 +259,7 @@ const MarkdownApprovals = () => {
                   <X className="h-4 w-4 mr-1" /> Reject
                 </Button>
               </div>
-              {selected.status === "approved" && (
+              {(selected.status === "approved" || selectedId) && selected.status !== "applied" && selected.status !== "rejected" && selected.status === "approved" && (
                 <Button
                   className="w-full"
                   onClick={() => updateMutation.mutate({ id: selected.id, status: "applied", notes: reviewNotes })}
