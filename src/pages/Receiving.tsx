@@ -1,25 +1,118 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScanBarcode, Check, Package } from "lucide-react";
-
-const mockPOLines = [
-  { sku: "MILK-001", name: "Fresh Whole Milk 1L", ordered: 500, received: 0, expiryTrackable: true, shelfLifeDays: 14 },
-  { sku: "JUICE-02", name: "Orange Juice 500ml", ordered: 200, received: 0, expiryTrackable: true, shelfLifeDays: 30 },
-  { sku: "BREAD-03", name: "White Sandwich Bread", ordered: 300, received: 0, expiryTrackable: true, shelfLifeDays: 7 },
-];
+import { getFEFOPutawaySuggestion } from "@/lib/fefo";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const Receiving = () => {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [poNumber, setPoNumber] = useState("");
-  const [selectedLine, setSelectedLine] = useState<number | null>(null);
+  const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [batchNumber, setBatchNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
   const [mfgDate, setMfgDate] = useState("");
   const [receivedQty, setReceivedQty] = useState("");
+  const [putawaySuggestion, setPutawaySuggestion] = useState<{ locationType: string; locationCode: string; reason: string } | null>(null);
+  const [locationScan, setLocationScan] = useState("");
+
+  // Load PO + lines
+  const { data: poData } = useQuery({
+    queryKey: ["receiving-po", poNumber],
+    queryFn: async () => {
+      if (!poNumber) return null;
+      const { data: po } = await supabase
+        .from("purchase_orders")
+        .select("*, po_lines(*, products(sku, name, shelf_life_days, expiry_trackable))")
+        .eq("po_number", poNumber)
+        .single();
+      return po;
+    },
+    enabled: !!poNumber && step >= 2,
+  });
+
+  const poLines = (poData as any)?.po_lines ?? [];
+  const selectedLine = poLines.find((l: any) => l.id === selectedLineId);
+
+  const handleLoadPO = async () => {
+    if (!poNumber) return;
+    setStep(2);
+  };
+
+  const handleSelectLine = (lineId: string) => {
+    setSelectedLineId(lineId);
+    setStep(3);
+  };
+
+  const handleConfirmBatch = async () => {
+    if (!selectedLine || !expiryDate) return;
+    const suggestion = await getFEFOPutawaySuggestion(
+      selectedLine.product_id,
+      poData?.id ? "a1000000-0000-0000-0000-000000000001" : "a1000000-0000-0000-0000-000000000001", // default store
+      expiryDate
+    );
+    setPutawaySuggestion(suggestion);
+    setStep(4);
+  };
+
+  const confirmMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedLine || !putawaySuggestion) throw new Error("Missing data");
+      const storeId = "a1000000-0000-0000-0000-000000000001";
+      // Create inventory batch
+      await supabase.from("inventory_batches").insert({
+        batch_number: batchNumber || `B${new Date().toISOString().slice(0,10).replace(/-/g,"")}`,
+        product_id: selectedLine.product_id,
+        store_id: storeId,
+        quantity: Number(receivedQty) || selectedLine.quantity_ordered,
+        expiry_date: expiryDate,
+        manufacturing_date: mfgDate || null,
+        location: locationScan || putawaySuggestion.locationCode,
+        status: "AVAILABLE",
+        qc_status: "PASSED",
+        po_line_id: selectedLine.id,
+        received_by: user?.id,
+      });
+
+      // Update PO line received qty
+      await supabase.from("po_lines").update({
+        quantity_received: selectedLine.quantity_received + (Number(receivedQty) || selectedLine.quantity_ordered),
+      }).eq("id", selectedLine.id);
+
+      // Log FEFO allocation
+      await supabase.from("fefo_allocation_log").insert({
+        batch_id: crypto.randomUUID(), // placeholder
+        allocation_type: "PUTAWAY",
+        location_type: putawaySuggestion.locationType,
+        location_code: locationScan || putawaySuggestion.locationCode,
+        quantity: Number(receivedQty) || selectedLine.quantity_ordered,
+        allocated_by: user?.id,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Batch received and put away successfully");
+      queryClient.invalidateQueries({ queryKey: ["receiving-po"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
+      // Reset
+      setStep(1);
+      setSelectedLineId(null);
+      setBatchNumber("");
+      setExpiryDate("");
+      setMfgDate("");
+      setReceivedQty("");
+      setPutawaySuggestion(null);
+      setLocationScan("");
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   return (
     <>
@@ -67,7 +160,7 @@ const Receiving = () => {
                 <Label>Scan Delivery Note or Enter PO Number</Label>
                 <div className="flex gap-2">
                   <Input placeholder="PO-2026-05001" value={poNumber} onChange={(e) => setPoNumber(e.target.value)} className="font-mono" />
-                  <Button onClick={() => { setPoNumber("PO-2026-05001"); setStep(2); }}>Load PO</Button>
+                  <Button onClick={handleLoadPO}>Load PO</Button>
                 </div>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
@@ -80,20 +173,21 @@ const Receiving = () => {
             <div className="space-y-4">
               <h3 className="font-semibold text-lg flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> PO Lines — {poNumber || "PO-2026-05001"}</h3>
               <div className="space-y-2">
-                {mockPOLines.map((line, i) => (
+                {poLines.length === 0 && <p className="text-sm text-muted-foreground">No PO found. Check the PO number.</p>}
+                {poLines.map((line: any) => (
                   <div
-                    key={line.sku}
+                    key={line.id}
                     className={`flex items-center justify-between p-4 rounded-lg border cursor-pointer transition-all ${
-                      selectedLine === i ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                      selectedLineId === line.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
                     }`}
-                    onClick={() => { setSelectedLine(i); setStep(3); }}
+                    onClick={() => handleSelectLine(line.id)}
                   >
                     <div>
-                      <div className="font-medium">{line.name}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{line.sku} · Shelf life: {line.shelfLifeDays}d</div>
+                      <div className="font-medium">{line.products?.name}</div>
+                      <div className="text-xs text-muted-foreground font-mono">{line.products?.sku} · Shelf life: {line.products?.shelf_life_days ?? "N/A"}d</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-semibold tabular-nums">{line.received}/{line.ordered}</div>
+                      <div className="font-semibold tabular-nums">{line.quantity_received}/{line.quantity_ordered}</div>
                       <div className="text-xs text-muted-foreground">received/ordered</div>
                     </div>
                   </div>
@@ -106,7 +200,7 @@ const Receiving = () => {
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Batch & Expiry Capture</h3>
               <p className="text-sm text-muted-foreground">
-                {selectedLine !== null ? mockPOLines[selectedLine].name : "Select an item"} — mandatory fields for expiry-trackable items.
+                {selectedLine ? selectedLine.products?.name : "Select an item"} — mandatory fields for expiry-trackable items.
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -126,26 +220,30 @@ const Receiving = () => {
                   <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
                 </div>
               </div>
-              <Button onClick={() => setStep(4)} className="mt-2">Confirm & Suggest Putaway</Button>
+              <Button onClick={handleConfirmBatch} className="mt-2" disabled={!expiryDate}>Confirm & Suggest Putaway</Button>
             </div>
           )}
 
           {step === 4 && (
             <div className="space-y-4">
               <h3 className="font-semibold text-lg">Putaway Location</h3>
-              <div className="bg-success/10 border border-success/30 rounded-lg p-4 space-y-2">
+              <div className={`${putawaySuggestion?.locationType === "PICKFACE" ? "bg-success/10 border-success/30" : "bg-primary/10 border-primary/30"} border rounded-lg p-4 space-y-2`}>
                 <div className="flex items-center gap-2 text-success font-semibold">
                   <Check className="h-5 w-5" /> FEFO Putaway Suggestion
                 </div>
                 <p className="text-sm">
-                  Batch <span className="font-mono font-semibold">{batchNumber || "B20260504-001"}</span> has the earliest expiry in this zone.
-                  Suggested location: <span className="font-mono font-bold">PICKFACE-A12</span>
+                  Batch <span className="font-mono font-semibold">{batchNumber || "NEW"}</span> →{" "}
+                  <span className="font-mono font-bold">{putawaySuggestion?.locationCode}</span>{" "}
+                  <Badge variant="outline" className="text-xs ml-1">{putawaySuggestion?.locationType}</Badge>
                 </p>
-                <p className="text-xs text-muted-foreground">Scan the location barcode to confirm putaway.</p>
+                <p className="text-xs text-muted-foreground">{putawaySuggestion?.reason}</p>
+                <p className="text-xs text-muted-foreground mt-1">Scan the location barcode to confirm putaway.</p>
               </div>
               <div className="flex gap-2">
-                <Input placeholder="Scan location barcode…" className="font-mono" />
-                <Button>Confirm Putaway</Button>
+                <Input placeholder="Scan location barcode…" className="font-mono" value={locationScan} onChange={(e) => setLocationScan(e.target.value)} />
+                <Button onClick={() => confirmMutation.mutate()} disabled={confirmMutation.isPending}>
+                  {confirmMutation.isPending ? "Saving…" : "Confirm Putaway"}
+                </Button>
               </div>
             </div>
           )}
