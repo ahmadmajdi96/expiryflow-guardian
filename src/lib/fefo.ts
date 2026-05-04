@@ -1,5 +1,16 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export interface TransferSuggestion {
+  batchId: string;
+  batchNumber: string;
+  expiryDate: string;
+  quantity: number;
+  fromStoreId: string;
+  fromLocation: string | null;
+  productName?: string;
+  daysLeft: number;
+}
+
 export interface FEFOSuggestion {
   batchId: string;
   batchNumber: string;
@@ -92,6 +103,50 @@ export async function getFEFOPickingSuggestion(
       quantity: allocate,
       location: b.location,
       locationType: b.location?.startsWith("PICKFACE") ? "PICKFACE" : "RESERVE",
+    });
+    remaining -= allocate;
+  }
+
+  return suggestions;
+}
+
+/**
+ * Get FEFO transfer suggestion — picks earliest-expiry batches from source store
+ * to balance inventory to destination store, respecting FEFO ordering.
+ */
+export async function getFEFOTransferSuggestion(
+  productId: string,
+  fromStoreId: string,
+  requestedQty: number
+): Promise<TransferSuggestion[]> {
+  const { data: batches } = await supabase
+    .from("inventory_batches")
+    .select("id, batch_number, expiry_date, quantity, location, product_id, store_id")
+    .eq("product_id", productId)
+    .eq("store_id", fromStoreId)
+    .eq("status", "AVAILABLE")
+    .eq("qc_status", "PASSED")
+    .gt("quantity", 0)
+    .order("expiry_date", { ascending: true });
+
+  if (!batches) return [];
+
+  const suggestions: TransferSuggestion[] = [];
+  let remaining = requestedQty;
+  const today = new Date();
+
+  for (const b of batches) {
+    if (remaining <= 0) break;
+    const allocate = Math.min(remaining, b.quantity);
+    const daysLeft = Math.ceil((new Date(b.expiry_date).getTime() - today.getTime()) / 86400000);
+    suggestions.push({
+      batchId: b.id,
+      batchNumber: b.batch_number,
+      expiryDate: b.expiry_date,
+      quantity: allocate,
+      fromStoreId: b.store_id,
+      fromLocation: b.location,
+      daysLeft,
     });
     remaining -= allocate;
   }
