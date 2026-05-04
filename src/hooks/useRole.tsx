@@ -5,9 +5,9 @@ import { useAuth } from "./useAuth";
 export type AppRole = "warehouse_clerk" | "qc_inspector" | "store_manager" | "admin";
 
 const ROLE_PERMISSIONS: Record<AppRole, string[]> = {
-  warehouse_clerk: ["/", "/receiving", "/transfers"],
+  warehouse_clerk: ["/", "/receiving", "/pick-requests", "/transfers"],
   qc_inspector: ["/", "/qc-inspection", "/quarantine"],
-  store_manager: ["/", "/expiry-alerts", "/receiving", "/qc-inspection", "/quarantine", "/transfers", "/markdown-approvals", "/settings"],
+  store_manager: ["/", "/expiry-alerts", "/receiving", "/pick-requests", "/qc-inspection", "/quarantine", "/transfers", "/markdown-approvals", "/settings", "/webhook-log"],
   admin: ["*"],
 };
 
