@@ -1,68 +1,147 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Boxes } from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Boxes, ShieldCheck, Layers, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 
 const Auth = () => {
-  const navigate = useNavigate();
-  const [isLogin, setIsLogin] = useState(true);
+  const { user, loading } = useAuth();
+  const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        navigate("/");
-      } else {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        toast.success("Check your email to confirm your account.");
+  if (loading) return null;
+  if (user) return <Navigate to="/" replace />;
+
+  const signIn = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    nav("/");
+  };
+  const signUp = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true);
+    const { error } = await supabase.auth.signUp({
+      email, password,
+      options: { emailRedirectTo: `${window.location.origin}/`, data: { full_name: name } },
+    });
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success("Account created. You can sign in now.");
+  };
+
+  const demoAccounts = [
+    { label: "Admin", email: "admin@corta.demo", name: "System Admin", role: "admin" },
+    { label: "Warehouse", email: "warehouse@corta.demo", name: "Warehouse Clerk", role: "warehouse_clerk" },
+    { label: "QC Inspector", email: "qc@corta.demo", name: "QC Inspector", role: "qc_inspector" },
+    { label: "Store Mgr", email: "store@corta.demo", name: "Store Manager", role: "store_manager" },
+  ];
+
+  const handleDemoLogin = async (account: typeof demoAccounts[0]) => {
+    setEmail(account.email); setPassword("demo1234"); setBusy(true);
+    let { error } = await supabase.auth.signInWithPassword({ email: account.email, password: "demo1234" });
+    if (error) {
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email: account.email, password: "demo1234",
+        options: { emailRedirectTo: `${window.location.origin}/`, data: { full_name: account.name } },
+      });
+      if (signUpErr && !signUpErr.message.toLowerCase().includes("registered")) {
+        setBusy(false); return toast.error(signUpErr.message);
       }
-    } catch (err: any) {
-      toast.error(err.message);
-    } finally {
-      setLoading(false);
+      // Sign in after signup
+      ({ error } = await supabase.auth.signInWithPassword({ email: account.email, password: "demo1234" }));
+      if (!error) {
+        // Assign role after first sign-in
+        const { data: { user: newUser } } = await supabase.auth.getUser();
+        if (newUser) {
+          await supabase.from("user_roles").insert({ user_id: newUser.id, role: account.role as any });
+        }
+      }
     }
+    setBusy(false);
+    if (error) return toast.error(error.message);
+    toast.success(`Signed in as ${account.label}`);
+    nav("/");
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--gradient-hero)" }}>
-      <div className="w-full max-w-sm page-section p-8 animate-scale-in">
-        <div className="flex flex-col items-center gap-2 mb-8">
-          <div className="h-12 w-12 rounded-xl flex items-center justify-center shadow-md" style={{ background: "var(--gradient-primary)", color: "hsl(var(--primary-foreground))" }}>
-            <Boxes className="h-6 w-6" />
+    <div className="min-h-screen grid lg:grid-cols-2">
+      <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center"><Boxes className="h-6 w-6" /></div>
+          <div>
+            <div className="text-xl font-bold">CORTA Inventory</div>
+            <div className="text-xs text-white/70">ExpirySmart WMS</div>
           </div>
-          <h1 className="text-xl font-bold tracking-tight">CORTA Inventory</h1>
-          <p className="text-sm text-muted-foreground">ExpirySmart WMS</p>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@company.com" />
+        <div className="space-y-6 max-w-md">
+          <h2 className="text-3xl font-bold leading-tight">Batch-level inventory, FEFO execution and expiry intelligence — in one system.</h2>
+          <p className="text-white/80">From receiving to markdown — manage batches, expiry zones, QC and AI-driven pricing in real time.</p>
+          <div className="grid grid-cols-3 gap-4 pt-4">
+            <div className="space-y-2"><Layers className="h-5 w-5" /><div className="text-sm font-medium">FEFO Execution</div></div>
+            <div className="space-y-2"><BarChart3 className="h-5 w-5" /><div className="text-sm font-medium">Expiry Zones</div></div>
+            <div className="space-y-2"><ShieldCheck className="h-5 w-5" /><div className="text-sm font-medium">Role-based access</div></div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" minLength={6} />
+        </div>
+        <div className="text-xs text-white/60">© 2026 CORTA Inventory · Connected to CoreERP</div>
+      </div>
+
+      <div className="flex items-center justify-center p-6">
+        <Card className="w-full max-w-md p-8">
+          <div className="lg:hidden flex items-center gap-3 mb-6">
+            <div className="h-10 w-10 rounded-lg flex items-center justify-center text-white" style={{ background: "var(--gradient-primary)" }}>
+              <Boxes className="h-5 w-5" />
+            </div>
+            <div><h1 className="text-lg font-bold">CORTA Inventory</h1></div>
           </div>
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Please wait…" : isLogin ? "Sign In" : "Create Account"}
-          </Button>
-        </form>
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-          <button type="button" className="text-primary font-medium hover:underline" onClick={() => setIsLogin(!isLogin)}>
-            {isLogin ? "Sign up" : "Sign in"}
-          </button>
-        </p>
+          <h2 className="text-2xl font-bold mb-1">Welcome back</h2>
+          <p className="text-sm text-muted-foreground mb-6">Sign in to your ExpirySmart WMS workspace.</p>
+          <Tabs defaultValue="signin">
+            <TabsList className="grid grid-cols-2 w-full">
+              <TabsTrigger value="signin">Sign in</TabsTrigger>
+              <TabsTrigger value="signup">Create account</TabsTrigger>
+            </TabsList>
+            <TabsContent value="signin">
+              <form onSubmit={signIn} className="space-y-4 mt-4">
+                <div><Label>Email</Label><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                <div><Label>Password</Label><Input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+                <Button type="submit" className="w-full" disabled={busy}>{busy ? "Signing in..." : "Sign in"}</Button>
+              </form>
+            </TabsContent>
+            <TabsContent value="signup">
+              <form onSubmit={signUp} className="space-y-4 mt-4">
+                <div><Label>Full name</Label><Input required value={name} onChange={(e) => setName(e.target.value)} /></div>
+                <div><Label>Email</Label><Input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+                <div><Label>Password</Label><Input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+                <Button type="submit" className="w-full" disabled={busy}>{busy ? "Creating..." : "Create account"}</Button>
+                <p className="text-xs text-muted-foreground">First user receives admin role. Additional users are assigned roles by admins.</p>
+              </form>
+            </TabsContent>
+          </Tabs>
+
+          <div className="mt-6 pt-5 border-t">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">Demo accounts · click to sign in</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {demoAccounts.map(r => (
+                <button key={r.email} type="button" disabled={busy} onClick={() => handleDemoLogin(r)}
+                  className="text-[11px] px-2 py-1.5 rounded-md border border-border bg-muted/30 hover:bg-primary/10 hover:border-primary/30 hover:text-primary transition-colors text-left disabled:opacity-50">
+                  <span className="font-semibold">{r.label}</span>
+                  <span className="text-muted-foreground block truncate text-[10px]">{r.email}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-2">Password: <code className="font-mono">demo1234</code> · Account + role auto-created on first click.</p>
+          </div>
+        </Card>
       </div>
     </div>
   );
