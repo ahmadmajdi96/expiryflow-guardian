@@ -46,19 +46,21 @@ const Auth = () => {
     { label: "Store Mgr", email: "store@corta.demo", name: "Store Manager", role: "store_manager" },
   ];
 
+  const DEMO_PASSWORD = "Corta!Inv2026#Secure";
+
   const handleDemoLogin = async (account: typeof demoAccounts[0]) => {
-    setEmail(account.email); setPassword("demo1234"); setBusy(true);
-    let { error } = await supabase.auth.signInWithPassword({ email: account.email, password: "demo1234" });
+    setEmail(account.email); setPassword(DEMO_PASSWORD); setBusy(true);
+    let { error } = await supabase.auth.signInWithPassword({ email: account.email, password: DEMO_PASSWORD });
     if (error) {
       const { error: signUpErr } = await supabase.auth.signUp({
-        email: account.email, password: "demo1234",
+        email: account.email, password: DEMO_PASSWORD,
         options: { emailRedirectTo: `${window.location.origin}/`, data: { full_name: account.name } },
       });
       if (signUpErr && !signUpErr.message.toLowerCase().includes("registered")) {
         setBusy(false); return toast.error(signUpErr.message);
       }
       // Sign in after signup
-      ({ error } = await supabase.auth.signInWithPassword({ email: account.email, password: "demo1234" }));
+      ({ error } = await supabase.auth.signInWithPassword({ email: account.email, password: DEMO_PASSWORD }));
       if (!error) {
         // Assign role after first sign-in
         const { data: { user: newUser } } = await supabase.auth.getUser();
@@ -139,7 +141,7 @@ const Auth = () => {
                 </button>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">Password: <code className="font-mono">demo1234</code> · Account + role auto-created on first click.</p>
+            <p className="text-[10px] text-muted-foreground mt-2">Account + role auto-created on first click.</p>
           </div>
         </Card>
       </div>
