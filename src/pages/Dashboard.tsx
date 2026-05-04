@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle } from "lucide-react";
@@ -20,6 +21,7 @@ function getZone(daysLeft: number) {
 }
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { data: batches } = useQuery({
     queryKey: ["dashboard-batches"],
     queryFn: async () => {
@@ -115,7 +117,7 @@ const Dashboard = () => {
             </thead>
             <tbody>
               {recentAlerts.map((a) => (
-                <tr key={a.id} className="table-row-hover border-b border-border/50">
+                <tr key={a.id} className="table-row-hover border-b border-border/50 cursor-pointer" onClick={() => navigate(`/batch/${a.id}`)}>
                   <td className="px-5 py-3 font-mono text-xs">{(a as any).products?.sku}</td>
                   <td className="px-5 py-3 font-mono text-xs">{a.batch_number}</td>
                   <td className="px-5 py-3">{(a as any).stores?.store_code}</td>

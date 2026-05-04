@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScanBarcode, Check, Package } from "lucide-react";
+import { Camera } from "lucide-react";
 import { getFEFOPutawaySuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -23,6 +24,16 @@ const Receiving = () => {
   const [receivedQty, setReceivedQty] = useState("");
   const [putawaySuggestion, setPutawaySuggestion] = useState<{ locationType: string; locationCode: string; reason: string } | null>(null);
   const [locationScan, setLocationScan] = useState("");
+  const [labelPhoto, setLabelPhoto] = useState<File | null>(null);
+  const [labelPreview, setLabelPreview] = useState<string | null>(null);
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setLabelPhoto(file);
+      setLabelPreview(URL.createObjectURL(file));
+    }
+  };
 
   // Load PO + lines
   const { data: poData } = useQuery({
@@ -67,6 +78,20 @@ const Receiving = () => {
     mutationFn: async () => {
       if (!selectedLine || !putawaySuggestion) throw new Error("Missing data");
       const storeId = "a1000000-0000-0000-0000-000000000001";
+
+      // Upload label photo if provided
+      let labelImageUrl: string | null = null;
+      if (labelPhoto) {
+        const ext = labelPhoto.name.split(".").pop() || "jpg";
+        const path = `${storeId}/${batchNumber || Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("batch-labels").upload(path, labelPhoto);
+        if (uploadErr) console.error("Photo upload failed:", uploadErr.message);
+        else {
+          const { data: urlData } = supabase.storage.from("batch-labels").getPublicUrl(path);
+          labelImageUrl = urlData.publicUrl;
+        }
+      }
+
       // Create inventory batch
       await supabase.from("inventory_batches").insert({
         batch_number: batchNumber || `B${new Date().toISOString().slice(0,10).replace(/-/g,"")}`,
@@ -80,7 +105,8 @@ const Receiving = () => {
         qc_status: "PASSED",
         po_line_id: selectedLine.id,
         received_by: user?.id,
-      });
+        ...(labelImageUrl ? { label_image_url: labelImageUrl } : {}),
+      } as any);
 
       // Update PO line received qty
       await supabase.from("po_lines").update({
@@ -110,6 +136,8 @@ const Receiving = () => {
       setReceivedQty("");
       setPutawaySuggestion(null);
       setLocationScan("");
+      setLabelPhoto(null);
+      setLabelPreview(null);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -218,6 +246,15 @@ const Receiving = () => {
                 <div className="space-y-2">
                   <Label>Expiry Date</Label>
                   <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                </div>
+                <div className="col-span-2 space-y-2">
+                  <Label className="flex items-center gap-1"><Camera className="h-4 w-4" /> Batch Label Photo</Label>
+                  <Input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} />
+                  {labelPreview && (
+                    <div className="mt-2">
+                      <img src={labelPreview} alt="Label preview" className="h-32 rounded-lg border border-border object-cover" />
+                    </div>
+                  )}
                 </div>
               </div>
               <Button onClick={handleConfirmBatch} className="mt-2" disabled={!expiryDate}>Confirm & Suggest Putaway</Button>
