@@ -4,9 +4,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   Boxes, LayoutDashboard, AlertTriangle, ScanBarcode, ClipboardCheck,
-  ArrowRightLeft, Settings, LogOut, Shield
+  ArrowRightLeft, Settings, LogOut, Shield, Tag
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRole } from "@/hooks/useRole";
 
 type NavItem = { to: string; label: string; icon: any };
 type NavSection = { label: string; items: NavItem[] };
@@ -18,6 +19,7 @@ const sections: NavSection[] = [
       { to: "/", label: "Dashboard", icon: LayoutDashboard },
       { to: "/expiry-alerts", label: "Expiry Alerts", icon: AlertTriangle },
       { to: "/receiving", label: "Receiving & Putaway", icon: ScanBarcode },
+      { to: "/markdown-approvals", label: "Markdown Approvals", icon: Tag },
     ],
   },
   {
@@ -38,6 +40,7 @@ const sections: NavSection[] = [
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, loading, signOut } = useAuth();
+  const { canAccess } = useRole();
   const location = useLocation();
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
@@ -60,7 +63,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <div key={sec.label}>
               <div className="nav-section-label">{sec.label}</div>
               <div className="space-y-0.5">
-                {sec.items.map(({ to, label, icon: Icon }) => (
+                {sec.items.filter(({ to }) => canAccess(to)).map(({ to, label, icon: Icon }) => (
                   <NavLink
                     key={to}
                     to={to}
