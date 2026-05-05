@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
-import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle } from "lucide-react";
+import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
+import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
 
 const zoneClass: Record<string, string> = {
   GREEN: "zone-green", YELLOW: "zone-yellow", ORANGE: "zone-orange", RED: "zone-red", BLACK: "zone-black"
@@ -75,6 +77,10 @@ const Dashboard = () => {
   ];
 
   const recentAlerts = enriched.filter((b) => b.zone !== "GREEN").slice(0, 10);
+  const [search, setSearch] = useState("");
+  const searchedAlerts = recentAlerts.filter((a) =>
+    matchesSearch(a, search, ["batch_number", "products.sku", "products.name", "stores.store_code"])
+  );
 
   return (
     <>
@@ -99,8 +105,18 @@ const Dashboard = () => {
 
       <div className="page-section">
         <div className="px-5 py-4 border-b border-border">
-          <h2 className="font-semibold text-lg">Recent Expiry Alerts</h2>
-          <p className="text-sm text-muted-foreground">Items entering warning zones across all stores</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-lg">Recent Expiry Alerts</h2>
+              <p className="text-sm text-muted-foreground">Items entering warning zones across all stores</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-64">
+                <DataTableFilter value={search} onChange={setSearch} placeholder="Search SKU, batch, store…" />
+              </div>
+              <Link to="/expiry-alerts" className="text-xs text-primary hover:underline whitespace-nowrap">View all →</Link>
+            </div>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -116,7 +132,7 @@ const Dashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {recentAlerts.map((a) => (
+              {searchedAlerts.map((a) => (
                 <tr key={a.id} className="table-row-hover border-b border-border/50 cursor-pointer" onClick={() => navigate(`/batch/${a.id}`)}>
                   <td className="px-5 py-3 font-mono text-xs">{(a as any).products?.sku}</td>
                   <td className="px-5 py-3 font-mono text-xs">{a.batch_number}</td>
@@ -129,7 +145,7 @@ const Dashboard = () => {
                   </td>
                 </tr>
               ))}
-              {recentAlerts.length === 0 && (
+              {searchedAlerts.length === 0 && (
                 <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No alerts — all stock in green zone</td></tr>
               )}
             </tbody>
