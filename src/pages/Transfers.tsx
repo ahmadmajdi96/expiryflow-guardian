@@ -11,6 +11,7 @@ import { ArrowRight, Plus, Package } from "lucide-react";
 import { getFEFOTransferSuggestion, type TransferSuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" },
@@ -27,6 +28,8 @@ const Transfers = () => {
   const [toStoreId, setToStoreId] = useState("");
   const [qty, setQty] = useState("");
   const [suggestions, setSuggestions] = useState<TransferSuggestion[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   const { data: transfers } = useQuery({
     queryKey: ["stock-transfers"],
@@ -178,7 +181,31 @@ const Transfers = () => {
         </div>
       )}
 
+  const filteredTransfers = (transfers ?? []).filter((t: any) => {
+    if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
+    return matchesSearch(t, search, ["transfer_code", "inventory_batches.batch_number", "inventory_batches.products.sku", "from_store.store_code", "to_store.store_code"]);
+  });
+
       <div className="page-section">
+        <div className="px-5 py-4 border-b border-border">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="font-semibold">Transfer History</h2>
+            <div className="flex items-center gap-2">
+              <div className="w-56">
+                <DataTableFilter value={search} onChange={setSearch} placeholder="Search transfer, batch, store…" />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Status</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
+                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -192,7 +219,7 @@ const Transfers = () => {
               </tr>
             </thead>
             <tbody>
-              {(transfers ?? []).map((t: any) => (
+              {filteredTransfers.map((t: any) => (
                 <tr key={t.id} className="table-row-hover border-b border-border/50">
                   <td className="px-5 py-3 font-mono text-xs font-semibold">{t.transfer_code}</td>
                   <td className="px-5 py-3">
@@ -211,7 +238,7 @@ const Transfers = () => {
                   <td className="px-5 py-3 font-mono text-xs">{t.created_at?.slice(0, 10)}</td>
                 </tr>
               ))}
-              {(transfers ?? []).length === 0 && (
+              {filteredTransfers.length === 0 && (
                 <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">No transfers yet</td></tr>
               )}
             </tbody>
