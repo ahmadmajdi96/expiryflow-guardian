@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Check, X, Tag, CheckCheck, Filter } from "lucide-react";
+import { Check, X, Tag, CheckCheck, Filter, Search } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
 
 const urgencyColor: Record<string, string> = {
   LOW: "bg-success/10 text-success border-success/30",
@@ -32,6 +33,7 @@ const MarkdownApprovals = () => {
   const [adjustedPrice, setAdjustedPrice] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState("pending");
   const [bulkSelected, setBulkSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
 
   const { data: proposals, isLoading } = useQuery({
     queryKey: ["markdown-proposals"],
@@ -45,7 +47,10 @@ const MarkdownApprovals = () => {
     },
   });
 
-  const filtered = (proposals ?? []).filter((p) => statusFilter === "all" || p.status === statusFilter);
+  const filtered = (proposals ?? []).filter((p) => {
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    return matchesSearch(p, search, ["sku", "batch_number", "reasoning"]);
+  });
 
   const toggleBulk = useCallback((id: string) => {
     setBulkSelected((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -111,7 +116,12 @@ const MarkdownApprovals = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 page-section">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold">Proposals</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="font-semibold">Proposals</h2>
+              <div className="w-56">
+                <DataTableFilter value={search} onChange={setSearch} placeholder="Search SKU, batch…" />
+              </div>
+            </div>
             <div className="flex items-center gap-2">
               {bulkSelected.length > 0 && statusFilter === "pending" && (
                 <>
