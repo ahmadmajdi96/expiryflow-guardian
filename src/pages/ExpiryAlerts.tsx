@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Download, Tag } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
 
 const zoneClass: Record<string, string> = { GREEN: "zone-green", YELLOW: "zone-yellow", ORANGE: "zone-orange", RED: "zone-red", BLACK: "zone-black" };
 const zoneEmoji: Record<string, string> = { GREEN: "🟢", YELLOW: "🟡", ORANGE: "🟠", RED: "🔴", BLACK: "⚫" };
@@ -22,7 +24,9 @@ const ExpiryAlerts = () => {
   const [storeFilter, setStoreFilter] = useState("all");
   const [zoneFilter, setZoneFilter] = useState("all");
   const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: batches, isLoading } = useQuery({
     queryKey: ["expiry-batches"],
@@ -54,6 +58,7 @@ const ExpiryAlerts = () => {
   const filtered = enriched.filter((a) => {
     if (storeFilter !== "all" && (a as any).stores?.store_code !== storeFilter) return false;
     if (zoneFilter !== "all" && a.zone !== zoneFilter) return false;
+    if (!matchesSearch(a, search, ["batch_number", "products.sku", "products.name"])) return false;
     return true;
   });
 
@@ -127,6 +132,9 @@ const ExpiryAlerts = () => {
       />
 
       <div className="flex gap-3 mb-4">
+        <div className="w-64">
+          <DataTableFilter value={search} onChange={setSearch} placeholder="Search SKU, batch, product…" />
+        </div>
         <Select value={storeFilter} onValueChange={setStoreFilter}>
           <SelectTrigger className="w-40"><SelectValue placeholder="Store" /></SelectTrigger>
           <SelectContent>
@@ -194,6 +202,9 @@ const ExpiryAlerts = () => {
                     >
                       {a.zone === "RED" ? "Urgent Clear" : "Propose MD"}
                     </Button>
+                  </td>
+                  <td className="px-5 py-3">
+                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => navigate(`/batch/${a.id}`)}>View</Button>
                   </td>
                 </tr>
               ))}
