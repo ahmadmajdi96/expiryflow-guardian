@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useIsFetching } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,11 @@ import { Camera } from "lucide-react";
 import { getFEFOPutawaySuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 const Receiving = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [poNumber, setPoNumber] = useState("");
@@ -54,20 +56,36 @@ const Receiving = () => {
   const selectedLine = poLines.find((l: any) => l.id === selectedLineId);
 
   const handleLoadPO = async () => {
-    if (!poNumber) return;
+    if (!poNumber.trim()) {
+      toast.error("Please enter a PO number before loading.");
+      return;
+    }
     setStep(2);
   };
 
   const handleSelectLine = (lineId: string) => {
+    if (!poData) {
+      toast.error("No PO loaded. Go back to step 1 and enter a valid PO number.");
+      setStep(1);
+      return;
+    }
     setSelectedLineId(lineId);
     setStep(3);
   };
 
   const handleConfirmBatch = async () => {
-    if (!selectedLine || !expiryDate) return;
+    if (!selectedLine || !expiryDate) {
+      toast.error("Please select a line item and enter an expiry date.");
+      return;
+    }
+    if (!poData) {
+      toast.error("No PO loaded. Go back to step 1.");
+      setStep(1);
+      return;
+    }
     const suggestion = await getFEFOPutawaySuggestion(
       selectedLine.product_id,
-      poData?.id ? "a1000000-0000-0000-0000-000000000001" : "a1000000-0000-0000-0000-000000000001", // default store
+      "a1000000-0000-0000-0000-000000000001",
       expiryDate
     );
     setPutawaySuggestion(suggestion);
@@ -148,6 +166,12 @@ const Receiving = () => {
         title="Receiving & Putaway"
         description="PO-based receiving workflow with batch/expiry capture and FEFO putaway logic."
         badge={<Badge variant="outline" className="text-xs">Step {step} of 4</Badge>}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/qc-inspection")}>QC Inspection</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/pick-requests")}>Pick Requests</Button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -201,7 +225,12 @@ const Receiving = () => {
             <div className="space-y-4">
               <h3 className="font-semibold text-lg flex items-center gap-2"><Package className="h-5 w-5 text-primary" /> PO Lines — {poNumber || "PO-2026-05001"}</h3>
               <div className="space-y-2">
-                {poLines.length === 0 && <p className="text-sm text-muted-foreground">No PO found. Check the PO number.</p>}
+                {poLines.length === 0 && (
+                  <div className="bg-muted/50 rounded-lg p-4 text-sm text-muted-foreground">
+                    <p>No PO found for "<span className="font-mono font-semibold">{poNumber}</span>". Check the PO number and try again.</p>
+                    <Button variant="outline" size="sm" className="mt-2" onClick={() => setStep(1)}>← Back to PO Selection</Button>
+                  </div>
+                )}
                 {poLines.map((line: any) => (
                   <div
                     key={line.id}
