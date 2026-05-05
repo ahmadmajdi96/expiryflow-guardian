@@ -111,6 +111,11 @@ const Transfers = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const filteredTransfers = (transfers ?? []).filter((t: any) => {
+    if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
+    return matchesSearch(t, search, ["transfer_code", "inventory_batches.batch_number", "inventory_batches.products.sku", "from_store.store_code", "to_store.store_code"]);
+  });
+
   return (
     <>
       <PageHeader
@@ -180,11 +185,6 @@ const Transfers = () => {
           )}
         </div>
       )}
-
-  const filteredTransfers = (transfers ?? []).filter((t: any) => {
-    if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
-    return matchesSearch(t, search, ["transfer_code", "inventory_batches.batch_number", "inventory_batches.products.sku", "from_store.store_code", "to_store.store_code"]);
-  });
 
       <div className="page-section">
         <div className="px-5 py-4 border-b border-border">
