@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getFEFOPickingSuggestion, type FEFOSuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" },
@@ -39,6 +40,13 @@ const PickRequests = () => {
   const [exceptionReason, setExceptionReason] = useState("");
   const [showExceptions, setShowExceptions] = useState(false);
   const [scannedLineIds, setScannedLineIds] = useState<Set<string>>(new Set());
+  const [pickSearch, setPickSearch] = useState("");
+  const [pickStatusFilter, setPickStatusFilter] = useState("ALL");
+
+  const filteredPicks = (picks ?? []).filter((p: any) => {
+    if (pickStatusFilter !== "ALL" && p.status !== pickStatusFilter) return false;
+    return matchesSearch(p, pickSearch, ["pick_code", "products.sku", "products.name", "stores.store_code"]);
+  });
 
   const { data: picks } = useQuery({
     queryKey: ["pick-requests"],
@@ -432,6 +440,27 @@ const PickRequests = () => {
 
       {/* Pick history table */}
       <div className="page-section">
+        <div className="px-5 py-4 border-b border-border">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="font-semibold">Pick History</h2>
+            <div className="flex items-center gap-2">
+              <div className="w-56">
+                <DataTableFilter value={pickSearch} onChange={setPickSearch} placeholder="Search pick code, SKU…" />
+              </div>
+              <Select value={pickStatusFilter} onValueChange={setPickStatusFilter}>
+                <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All Status</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="PICKING">Picking</SelectItem>
+                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                  <SelectItem value="PARTIAL">Partial</SelectItem>
+                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -446,7 +475,7 @@ const PickRequests = () => {
               </tr>
             </thead>
             <tbody>
-              {(picks ?? []).map((p: any) => (
+              {filteredPicks.map((p: any) => (
                 <tr key={p.id} className="table-row-hover border-b border-border/50">
                   <td className="px-5 py-3 font-mono text-xs font-semibold">{p.pick_code}</td>
                   <td className="px-5 py-3">
@@ -473,7 +502,7 @@ const PickRequests = () => {
                   </td>
                 </tr>
               ))}
-              {(picks ?? []).length === 0 && (
+              {filteredPicks.length === 0 && (
                 <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No pick requests yet</td></tr>
               )}
             </tbody>
