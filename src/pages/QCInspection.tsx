@@ -8,6 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { CheckCircle, XCircle } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const statusBadge: Record<string, { cls: string; label: string }> = {
   PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" },
@@ -17,9 +20,12 @@ const statusBadge: Record<string, { cls: string; label: string }> = {
 
 const QCInspection = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
 
   const { data: batches, isLoading } = useQuery({
     queryKey: ["qc-batches"],
@@ -27,7 +33,6 @@ const QCInspection = () => {
       const { data } = await supabase
         .from("inventory_batches")
         .select("id, batch_number, quantity, qc_status, products(sku, name), stores(store_code)")
-        .in("qc_status", ["PENDING", "PASSED", "FAILED"])
         .order("received_at", { ascending: false })
         .limit(50);
       return data ?? [];
@@ -36,23 +41,32 @@ const QCInspection = () => {
 
   const inspectMutation = useMutation({
     mutationFn: async ({ result }: { result: "PASSED" | "FAILED" }) => {
-      if (!selectedBatchId) throw new Error("No batch selected");
+      if (!selectedBatchId) {
+        throw new Error("No batch selected. Please click 'Inspect' on a PENDING batch first.");
+      }
+      const batch = batches?.find((b) => b.id === selectedBatchId);
+      if (!batch || batch.qc_status !== "PENDING") {
+        throw new Error("Only PENDING batches can be inspected.");
+      }
       // Create QC record
-      await supabase.from("qc_inspections").insert({
+      const { error: insertErr } = await supabase.from("qc_inspections").insert({
         batch_id: selectedBatchId,
         inspector_id: user?.id,
         result,
         notes: notes || null,
       });
+      if (insertErr) throw insertErr;
       // Update batch qc_status (and quarantine if failed)
       const update: any = { qc_status: result };
       if (result === "FAILED") update.status = "QUARANTINED";
-      await supabase.from("inventory_batches").update(update).eq("id", selectedBatchId);
+      const { error: updateErr } = await supabase.from("inventory_batches").update(update).eq("id", selectedBatchId);
+      if (updateErr) throw updateErr;
     },
     onSuccess: (_, { result }) => {
       toast.success(result === "PASSED" ? "Batch passed QC inspection." : "Batch failed — moved to quarantine.");
       queryClient.invalidateQueries({ queryKey: ["qc-batches"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
+      queryClient.invalidateQueries({ queryKey: ["quarantine-batches"] });
       setSelectedBatchId(null);
       setNotes("");
     },
@@ -61,17 +75,44 @@ const QCInspection = () => {
 
   const selected = batches?.find((b) => b.id === selectedBatchId);
 
+  const filteredBatches = (batches ?? []).filter((b: any) => {
+    if (statusFilter !== "ALL" && b.qc_status !== statusFilter) return false;
+    return matchesSearch(b, search, ["batch_number", "products.sku", "products.name", "stores.store_code"]);
+  });
+
   return (
     <>
       <PageHeader
         title="QC Inspection"
         description="Quality control workflow — inspect batches and pass or quarantine them."
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/quarantine")}>Quarantine</Button>
+            <Button variant="outline" size="sm" onClick={() => navigate("/receiving")}>Receiving</Button>
+          </div>
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 page-section">
           <div className="px-5 py-4 border-b border-border">
-            <h2 className="font-semibold">Inspection Queue</h2>
+            <div className="flex items-center justify-between gap-4">
+              <h2 className="font-semibold">Inspection Queue</h2>
+              <div className="flex items-center gap-2">
+                <div className="w-56">
+                  <DataTableFilter value={search} onChange={setSearch} placeholder="Search batch, SKU…" />
+                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Status</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="PASSED">Passed</SelectItem>
+                    <SelectItem value="FAILED">Failed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Loading…</div>
@@ -89,7 +130,7 @@ const QCInspection = () => {
                 </tr>
               </thead>
               <tbody>
-                {(batches ?? []).map((b: any) => (
+                {filteredBatches.map((b: any) => (
                   <tr key={b.id} className={`table-row-hover border-b border-border/50 ${selectedBatchId === b.id ? "bg-primary/5" : ""}`}>
                     <td className="px-5 py-3 font-mono text-xs">{b.batch_number}</td>
                     <td className="px-5 py-3">
