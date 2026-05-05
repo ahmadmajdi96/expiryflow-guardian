@@ -43,11 +43,6 @@ const PickRequests = () => {
   const [pickSearch, setPickSearch] = useState("");
   const [pickStatusFilter, setPickStatusFilter] = useState("ALL");
 
-  const filteredPicks = (picks ?? []).filter((p: any) => {
-    if (pickStatusFilter !== "ALL" && p.status !== pickStatusFilter) return false;
-    return matchesSearch(p, pickSearch, ["pick_code", "products.sku", "products.name", "stores.store_code"]);
-  });
-
   const { data: picks } = useQuery({
     queryKey: ["pick-requests"],
     queryFn: async () => {
@@ -58,6 +53,11 @@ const PickRequests = () => {
         .limit(50);
       return data ?? [];
     },
+  });
+
+  const filteredPicks = (picks ?? []).filter((p: any) => {
+    if (pickStatusFilter !== "ALL" && p.status !== pickStatusFilter) return false;
+    return matchesSearch(p, pickSearch, ["pick_code", "products.sku", "products.name", "stores.store_code"]);
   });
 
   const { data: stores } = useQuery({
