@@ -121,7 +121,24 @@ const Transfers = () => {
       const sm: Record<string, { cls: string; label: string }> = { PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" }, IN_TRANSIT: { cls: "bg-info/10 text-info border-info/30", label: "In Transit" }, COMPLETED: { cls: "bg-success/10 text-success border-success/30", label: "Completed" } };
       return <Badge variant="outline" className={sm[r.status]?.cls || ""}>{sm[r.status]?.label || r.status}</Badge>;
     }},
+    { key: "action", header: "Action", accessor: () => "", exportable: false, cell: (r) => {
+      if (r.status === "PENDING") return (
+        <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handleAdvanceStatus(r.id, "IN_TRANSIT"); }}>Ship</Button>
+      );
+      if (r.status === "IN_TRANSIT") return (
+        <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handleAdvanceStatus(r.id, "COMPLETED"); }}>Complete</Button>
+      );
+      return null;
+    }},
   ];
+
+  const handleAdvanceStatus = async (id: string, newStatus: string) => {
+    const update: any = { status: newStatus };
+    if (newStatus === "COMPLETED") update.completed_at = new Date().toISOString();
+    await supabase.from("stock_transfers").update(update).eq("id", id);
+    queryClient.invalidateQueries({ queryKey: ["stock-transfers"] });
+    toast.success(`Transfer ${newStatus === "IN_TRANSIT" ? "shipped" : "completed"}`);
+  };
 
   return (
     <>
