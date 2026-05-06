@@ -255,11 +255,11 @@ const Receiving = () => {
         title="Receiving & Putaway"
         description="PO-based receiving workflow with batch/expiry capture and FEFO putaway logic."
         badge={<Badge variant="outline" className="text-xs">Step {step} of 4</Badge>}
-      rightContent={
-        <div className="flex items-center gap-2">
+        actions={
+        <div className="flex gap-2 items-center">
           {!online && (
             <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">
-              <WifiOff className="h-3 w-3 mr-1" /> Offline Mode
+              <WifiOff className="h-3 w-3 mr-1" /> Offline
             </Badge>
           )}
           {offlineCount > 0 && (
@@ -267,10 +267,6 @@ const Receiving = () => {
               <CloudUpload className="h-3 w-3 mr-1" /> {offlineCount} queued
             </Badge>
           )}
-        </div>
-      }
-        actions={
-          <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/qc-inspection")}>QC Inspection</Button>
             <Button variant="outline" size="sm" onClick={() => navigate("/pick-requests")}>Pick Requests</Button>
           </div>
