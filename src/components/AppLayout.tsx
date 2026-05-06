@@ -49,7 +49,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
   return (
     <div className="min-h-screen flex bg-background">
-      <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
+      <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col fixed inset-y-0 left-0 z-30">
         <div className="px-5 py-5 flex items-center gap-3 border-b border-sidebar-border">
           <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-md" style={{ background: "var(--gradient-primary)", color: "hsl(var(--primary-foreground))" }}>
             <Boxes className="h-5 w-5" />
@@ -60,7 +60,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
           </div>
         </div>
 
-        <nav className="flex-1 py-3 px-3 overflow-y-auto">
+        <nav className="flex-1 py-3 px-3 overflow-y-auto min-h-0">
           {sections.map((sec) => (
             <div key={sec.label}>
               <div className="nav-section-label">{sec.label}</div>
@@ -103,7 +103,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 overflow-auto" style={{ background: "var(--gradient-hero)" }}>
+      <main className="flex-1 min-w-0 overflow-auto ml-64" style={{ background: "var(--gradient-hero)" }}>
         <div className="px-8 py-6 max-w-[1600px] mx-auto animate-fade-in">{children}</div>
       </main>
     </div>

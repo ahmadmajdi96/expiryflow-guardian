@@ -79,9 +79,9 @@ const Auth = () => {
     <div className="min-h-screen grid lg:grid-cols-2">
       <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
         <div className="flex items-center gap-3">
-          <div className="h-11 w-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center"><Boxes className="h-6 w-6" /></div>
+          <div className="h-11 w-11 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center shrink-0"><Boxes className="h-6 w-6" /></div>
           <div>
-            <div className="text-xl font-bold">CORTA Inventory</div>
+            <div className="text-xl font-bold">CORTA WMS</div>
             <div className="text-xs text-white/70">ExpirySmart WMS</div>
           </div>
         </div>
@@ -103,7 +103,7 @@ const Auth = () => {
             <div className="h-10 w-10 rounded-lg flex items-center justify-center text-white" style={{ background: "var(--gradient-primary)" }}>
               <Boxes className="h-5 w-5" />
             </div>
-            <div><h1 className="text-lg font-bold">CORTA Inventory</h1></div>
+            <div><h1 className="text-lg font-bold">CORTA WMS</h1></div>
           </div>
           <h2 className="text-2xl font-bold mb-1">Welcome back</h2>
           <p className="text-sm text-muted-foreground mb-6">Sign in to your ExpirySmart WMS workspace.</p>
