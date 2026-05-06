@@ -346,8 +346,19 @@ const PickRequests = () => {
                     <Badge variant="outline" className="ml-2 text-xs">{l.location_type}</Badge>
                   </div>
                 </div>
-                <div className="text-sm font-mono tabular-nums">
+                <div className="flex items-center gap-2">
+                  {expiryWarnings[l.id] && (
+                    <Badge variant="outline" className={
+                      expiryWarnings[l.id].status === "BLOCKED"
+                        ? "bg-destructive/10 text-destructive border-destructive/30 text-xs"
+                        : "bg-warning/10 text-warning border-warning/30 text-xs"
+                    }>
+                      {expiryWarnings[l.id].zone} · {expiryWarnings[l.id].daysLeft}d
+                    </Badge>
+                  )}
+                  <span className="text-sm font-mono tabular-nums">
                   {l.picked_quantity}/{l.allocated_quantity}
+                  </span>
                 </div>
                 {!scannedLineIds.has(l.id) && l.picked_quantity < l.allocated_quantity && (
                   <Button variant="ghost" size="sm" className="text-xs h-7 text-warning" onClick={() => setExceptionLine(l)}>
