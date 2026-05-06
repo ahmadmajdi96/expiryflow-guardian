@@ -1,19 +1,17 @@
-import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { DataTable, DataTableColumn } from "@/components/DataTable";
 
 const Quarantine = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
 
-  const { data: batches, isLoading } = useQuery({
+  const { data: batches } = useQuery({
     queryKey: ["quarantine-batches"],
     queryFn: async () => {
       const { data } = await supabase
@@ -48,70 +46,43 @@ const Quarantine = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const filtered = (batches ?? []).filter((b: any) =>
-    matchesSearch(b, search, ["batch_number", "products.sku", "products.name", "stores.store_code"])
-  );
+  const columns: DataTableColumn<any>[] = [
+    { key: "batch_number", header: "Batch #", accessor: (r) => r.batch_number, sortable: true, filter: "text", cell: (r) => (
+      <span className="font-mono text-xs cursor-pointer hover:text-primary" onClick={() => navigate(`/batch/${r.id}`)}>{r.batch_number}</span>
+    )},
+    { key: "product", header: "Product", accessor: (r) => r.products?.name, sortable: true, filter: "text", cell: (r) => (
+      <div><div className="font-medium">{r.products?.name}</div><div className="text-xs text-muted-foreground">{r.products?.sku}</div></div>
+    )},
+    { key: "store", header: "Store", accessor: (r) => r.stores?.store_code, sortable: true, filter: "select" },
+    { key: "quantity", header: "Qty", accessor: (r) => r.quantity, sortable: true, align: "right", cell: (r) => <span className="tabular-nums">{r.quantity}</span> },
+    { key: "qc_status", header: "QC Status", accessor: (r) => r.qc_status, filter: "select", cell: (r) => (
+      <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs">{r.qc_status}</Badge>
+    )},
+    { key: "received_at", header: "Date", accessor: (r) => r.received_at, sortable: true, filter: "date", cell: (r) => <span className="font-mono text-xs">{r.received_at?.slice(0, 10)}</span> },
+    { key: "actions", header: "Actions", accessor: () => "", exportable: false, cell: (r) => (
+      <div className="space-x-1">
+        <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); releaseMutation.mutate(r.id); }} disabled={releaseMutation.isPending}>Release</Button>
+        <Button variant="outline" size="sm" className="text-xs h-7 text-destructive" onClick={(e) => { e.stopPropagation(); writeOffMutation.mutate(r.id); }} disabled={writeOffMutation.isPending}>Write-Off</Button>
+      </div>
+    )},
+  ];
 
   return (
     <>
       <PageHeader
         title="Quarantine Management"
         description="Quarantined stock is excluded from sale, markdown proposals, and picking."
-        badge={<Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">{filtered.length} items</Badge>}
-        actions={
-          <Button variant="outline" size="sm" onClick={() => navigate("/qc-inspection")}>QC Inspection</Button>
-        }
+        badge={<Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30">{(batches ?? []).length} items</Badge>}
+        actions={<Button variant="outline" size="sm" onClick={() => navigate("/qc-inspection")}>QC Inspection</Button>}
       />
-
-      <div className="mb-4 max-w-sm">
-        <DataTableFilter value={search} onChange={setSearch} placeholder="Search batch, SKU, product…" />
-      </div>
-
-      <div className="page-section">
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading…</div>
-        ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-5 py-3 font-medium text-muted-foreground">Batch #</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Product</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Store</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Qty</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">QC Status</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Date</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((q: any) => (
-                <tr key={q.id} className="table-row-hover border-b border-border/50">
-                  <td className="px-5 py-3 font-mono text-xs cursor-pointer hover:text-primary" onClick={() => navigate(`/batch/${q.id}`)}>{q.batch_number}</td>
-                  <td className="px-5 py-3">
-                    <div className="font-medium">{q.products?.name}</div>
-                    <div className="text-xs text-muted-foreground">{q.products?.sku}</div>
-                  </td>
-                  <td className="px-5 py-3">{q.stores?.store_code}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{q.quantity}</td>
-                  <td className="px-5 py-3">
-                    <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-xs">{q.qc_status}</Badge>
-                  </td>
-                  <td className="px-5 py-3 font-mono text-xs">{q.received_at?.slice(0, 10)}</td>
-                  <td className="px-5 py-3 space-x-1">
-                    <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => releaseMutation.mutate(q.id)} disabled={releaseMutation.isPending}>Release</Button>
-                    <Button variant="outline" size="sm" className="text-xs h-7 text-destructive" onClick={() => writeOffMutation.mutate(q.id)} disabled={writeOffMutation.isPending}>Write-Off</Button>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No quarantined items</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        )}
-      </div>
+      <DataTable
+        rows={batches ?? []}
+        columns={columns}
+        rowKey={(r) => r.id}
+        exportFilename="quarantine"
+        tableId="quarantine"
+        emptyMessage="No quarantined items"
+      />
     </>
   );
 };
