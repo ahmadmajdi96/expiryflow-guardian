@@ -18,6 +18,9 @@ import BatchDetails from "./pages/BatchDetails";
 import WebhookLog from "./pages/WebhookLog";
 import PickRequests from "./pages/PickRequests";
 import NotFound from "./pages/NotFound";
+import Products from "./pages/Products";
+import Stores from "./pages/Stores";
+import UserManagement from "./pages/UserManagement";
 
 const queryClient = new QueryClient();
 
@@ -43,6 +46,9 @@ const App = () => (
             <Route path="/webhook-log" element={<Wrap><WebhookLog /></Wrap>} />
             <Route path="/batch/:id" element={<Wrap><BatchDetails /></Wrap>} />
             <Route path="/settings" element={<Wrap><AlertSettings /></Wrap>} />
+            <Route path="/products" element={<Wrap><Products /></Wrap>} />
+            <Route path="/stores" element={<Wrap><Stores /></Wrap>} />
+            <Route path="/users" element={<Wrap><UserManagement /></Wrap>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

@@ -1,10 +1,11 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { NavLink, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
   Boxes, LayoutDashboard, AlertTriangle, ScanBarcode, ClipboardCheck,
-  ArrowRightLeft, Settings, LogOut, Shield, Tag, PackageSearch, ScrollText
+  ArrowRightLeft, Settings, LogOut, Shield, Tag, PackageSearch, ScrollText,
+  Package, Store, Users, Menu
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/hooks/useRole";
@@ -42,14 +43,16 @@ const sections: NavSection[] = [
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, loading, signOut } = useAuth();
-  const { canAccess } = useRole();
+  const { canAccess, roles } = useRole();
   const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
 
   return (
     <div className="min-h-screen flex bg-background">
-      <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col fixed inset-y-0 left-0 z-30">
+      {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />}
+      <aside className={`w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col fixed inset-y-0 left-0 z-30 transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="px-5 py-5 flex items-center gap-3 border-b border-sidebar-border">
           <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-md" style={{ background: "var(--gradient-primary)", color: "hsl(var(--primary-foreground))" }}>
             <Boxes className="h-5 w-5" />
@@ -88,7 +91,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold truncate text-sidebar-foreground">{user.email}</div>
-              <div className="text-[10px] truncate" style={{ color: "hsl(var(--sidebar-muted))" }}>Warehouse Operator</div>
+              <div className="text-[10px] truncate capitalize" style={{ color: "hsl(var(--sidebar-muted))" }}>{roles.length > 0 ? roles.map(r => r.replace(/_/g, " ")).join(", ") : "No role"}</div>
             </div>
           </div>
           <Button
@@ -103,8 +106,12 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
       </aside>
 
-      <main className="flex-1 min-w-0 overflow-auto ml-64" style={{ background: "var(--gradient-hero)" }}>
-        <div className="px-8 py-6 max-w-[1600px] mx-auto animate-fade-in">{children}</div>
+      <main className="flex-1 min-w-0 overflow-auto lg:ml-64" style={{ background: "var(--gradient-hero)" }}>
+        <div className="lg:hidden sticky top-0 z-10 bg-sidebar border-b border-sidebar-border px-4 py-3 flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)} className="p-1"><Menu className="h-5 w-5" /></Button>
+          <span className="font-bold text-sm">CORTA WMS</span>
+        </div>
+        <div className="px-4 py-4 lg:px-8 lg:py-6 max-w-[1600px] mx-auto animate-fade-in">{children}</div>
       </main>
     </div>
   );

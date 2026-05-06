@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getFEFOPickingSuggestion, type FEFOSuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
+import { DataTable, DataTableColumn } from "@/components/DataTable";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" },
@@ -40,8 +40,6 @@ const PickRequests = () => {
   const [exceptionReason, setExceptionReason] = useState("");
   const [showExceptions, setShowExceptions] = useState(false);
   const [scannedLineIds, setScannedLineIds] = useState<Set<string>>(new Set());
-  const [pickSearch, setPickSearch] = useState("");
-  const [pickStatusFilter, setPickStatusFilter] = useState("ALL");
 
   const { data: picks } = useQuery({
     queryKey: ["pick-requests"],
@@ -53,11 +51,6 @@ const PickRequests = () => {
         .limit(50);
       return data ?? [];
     },
-  });
-
-  const filteredPicks = (picks ?? []).filter((p: any) => {
-    if (pickStatusFilter !== "ALL" && p.status !== pickStatusFilter) return false;
-    return matchesSearch(p, pickSearch, ["pick_code", "products.sku", "products.name", "stores.store_code"]);
   });
 
   const { data: stores } = useQuery({
@@ -249,6 +242,26 @@ const PickRequests = () => {
     queryClient.invalidateQueries({ queryKey: ["pick-exceptions", pickingId] });
   };
 
+  const pickColumns: DataTableColumn<any>[] = [
+    { key: "pick_code", header: "Pick Code", accessor: (r) => r.pick_code, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs font-semibold">{r.pick_code}</span> },
+    { key: "product", header: "Product", accessor: (r) => r.products?.name ?? "", sortable: true, filter: "text", cell: (r) => (
+      <div><div className="font-medium">{r.products?.name}</div><div className="text-xs text-muted-foreground">{r.products?.sku}</div></div>
+    )},
+    { key: "store", header: "Store", accessor: (r) => r.stores?.store_code ?? "", sortable: true, filter: "select" },
+    { key: "requested_quantity", header: "Requested", accessor: (r) => r.requested_quantity, sortable: true, align: "right", cell: (r) => <span className="tabular-nums">{r.requested_quantity}</span> },
+    { key: "fulfilled_quantity", header: "Fulfilled", accessor: (r) => r.fulfilled_quantity, sortable: true, align: "right", cell: (r) => <span className="tabular-nums">{r.fulfilled_quantity}</span> },
+    { key: "status", header: "Status", accessor: (r) => r.status, filter: "select", options: ["PENDING", "PICKING", "COMPLETED", "PARTIAL", "CANCELLED"], cell: (r) => (
+      <Badge variant="outline" className={statusMap[r.status]?.cls || ""}>{statusMap[r.status]?.label || r.status}</Badge>
+    )},
+    { key: "action", header: "Action", accessor: () => "", exportable: false, cell: (r) => (
+      r.status === "PENDING" ? (
+        <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handleStartPicking(r.id); }}>Start Picking</Button>
+      ) : r.status === "PARTIAL" ? (
+        <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handleStartPicking(r.id); }}><RotateCcw className="h-3 w-3 mr-1" /> Resume</Button>
+      ) : null
+    )},
+  ];
+
   const { data: exceptions } = useQuery({
     queryKey: ["pick-exceptions", pickingId],
     queryFn: async () => {
@@ -438,77 +451,15 @@ const PickRequests = () => {
         </div>
       )}
 
-      {/* Pick history table */}
-      <div className="page-section">
-        <div className="px-5 py-4 border-b border-border">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="font-semibold">Pick History</h2>
-            <div className="flex items-center gap-2">
-              <div className="w-56">
-                <DataTableFilter value={pickSearch} onChange={setPickSearch} placeholder="Search pick code, SKU…" />
-              </div>
-              <Select value={pickStatusFilter} onValueChange={setPickStatusFilter}>
-                <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Status</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="PICKING">Picking</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="PARTIAL">Partial</SelectItem>
-                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-5 py-3 font-medium text-muted-foreground">Pick Code</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Product</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Store</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Requested</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Fulfilled</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Status</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPicks.map((p: any) => (
-                <tr key={p.id} className="table-row-hover border-b border-border/50">
-                  <td className="px-5 py-3 font-mono text-xs font-semibold">{p.pick_code}</td>
-                  <td className="px-5 py-3">
-                    <div className="font-medium">{p.products?.name}</div>
-                    <div className="text-xs text-muted-foreground">{p.products?.sku}</div>
-                  </td>
-                  <td className="px-5 py-3">{p.stores?.store_code}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{p.requested_quantity}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{p.fulfilled_quantity}</td>
-                  <td className="px-5 py-3">
-                    <Badge variant="outline" className={statusMap[p.status]?.cls || ""}>{statusMap[p.status]?.label || p.status}</Badge>
-                  </td>
-                  <td className="px-5 py-3">
-                    {p.status === "PENDING" && (
-                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleStartPicking(p.id)}>
-                        Start Picking
-                      </Button>
-                    )}
-                    {p.status === "PARTIAL" && (
-                      <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => handleStartPicking(p.id)}>
-                        <RotateCcw className="h-3 w-3 mr-1" /> Resume
-                      </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {filteredPicks.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No pick requests yet</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        rows={picks ?? []}
+        columns={pickColumns}
+        rowKey={(r) => r.id}
+        exportFilename="pick-requests"
+        tableId="picks"
+        createdAtKey="created_at"
+        emptyMessage="No pick requests yet"
+      />
     </>
   );
 };

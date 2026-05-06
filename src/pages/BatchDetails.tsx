@@ -47,6 +47,19 @@ const BatchDetails = () => {
     enabled: !!id,
   });
 
+  const { data: fefoHistory } = useQuery({
+    queryKey: ["batch-fefo", id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("fefo_allocation_log")
+        .select("*")
+        .eq("batch_id", id!)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!id,
+  });
+
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
   if (!batch) return <div className="p-8 text-center text-muted-foreground">Batch not found.</div>;
 
@@ -91,6 +104,27 @@ const BatchDetails = () => {
                       <span className="text-xs text-muted-foreground ml-2">{qc.inspected_at?.slice(0, 10)}</span>
                     </div>
                     <div className="text-xs text-muted-foreground">{qc.notes || "No notes"}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {fefoHistory && fefoHistory.length > 0 && (
+            <div className="page-section p-5">
+              <h3 className="font-semibold mb-4">FEFO Allocation History</h3>
+              <div className="space-y-2">
+                {fefoHistory.map((log) => (
+                  <div key={log.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{log.allocation_type}</Badge>
+                      <span className="font-mono text-xs">{log.location_code}</span>
+                      <Badge variant="outline" className="text-xs">{log.location_type}</Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="tabular-nums text-sm font-semibold">{log.quantity} units</span>
+                      <span className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
                   </div>
                 ))}
               </div>

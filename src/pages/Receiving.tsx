@@ -12,6 +12,8 @@ import { getFEFOPutawaySuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle as AlertTriangleIcon } from "lucide-react";
 
 const Receiving = () => {
   const { user } = useAuth();
@@ -28,6 +30,7 @@ const Receiving = () => {
   const [locationScan, setLocationScan] = useState("");
   const [labelPhoto, setLabelPhoto] = useState<File | null>(null);
   const [labelPreview, setLabelPreview] = useState<string | null>(null);
+  const [shelfLifeWarning, setShelfLifeWarning] = useState<string | null>(null);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -35,6 +38,31 @@ const Receiving = () => {
       setLabelPhoto(file);
       setLabelPreview(URL.createObjectURL(file));
     }
+  };
+
+  // Validate shelf life when expiry date changes
+  const validateShelfLife = (expiry: string) => {
+    setExpiryDate(expiry);
+    if (!expiry || !selectedLine) {
+      setShelfLifeWarning(null);
+      return;
+    }
+    const product = selectedLine.products;
+    const shelfLifeDays = product?.shelf_life_days;
+    const today = new Date();
+    const expiryDateObj = new Date(expiry);
+    const daysLeft = Math.ceil((expiryDateObj.getTime() - today.getTime()) / 86400000);
+
+    if (daysLeft <= 0) {
+      setShelfLifeWarning("⛔ This batch is already expired! Cannot receive expired stock.");
+      return;
+    }
+    if (shelfLifeDays && daysLeft < shelfLifeDays * 0.5) {
+      const pctUsed = Math.round(((shelfLifeDays - daysLeft) / shelfLifeDays) * 100);
+      setShelfLifeWarning(`⚠️ Shelf life ${pctUsed}% consumed (${daysLeft} of ${shelfLifeDays} days remaining). Consider rejecting this batch.`);
+      return;
+    }
+    setShelfLifeWarning(null);
   };
 
   // Load PO + lines
@@ -74,13 +102,14 @@ const Receiving = () => {
   };
 
   const handleConfirmBatch = async () => {
-    if (!selectedLine || !expiryDate) {
+    if (!selectedLine || !expiryDate || !poData) {
       toast.error("Please select a line item and enter an expiry date.");
       return;
     }
-    if (!poData) {
-      toast.error("No PO loaded. Go back to step 1.");
-      setStep(1);
+    // Block expired stock
+    const daysLeft = Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86400000);
+    if (daysLeft <= 0) {
+      toast.error("Cannot receive expired stock. Reject this batch.");
       return;
     }
     const suggestion = await getFEFOPutawaySuggestion(
@@ -140,6 +169,25 @@ const Receiving = () => {
         quantity: Number(receivedQty) || selectedLine.quantity_ordered,
         allocated_by: user?.id,
       });
+
+      // Send receipt confirmation to CoreERP webhook
+      try {
+        await supabase.functions.invoke("coreerp-po-webhook", {
+          body: {
+            event: "receipt.confirmed",
+            data: {
+              poNumber: poData?.po_number,
+              sku: selectedLine.products?.sku,
+              batchNumber: batchNumber || `B${new Date().toISOString().slice(0,10).replace(/-/g,"")}`,
+              quantityReceived: Number(receivedQty) || selectedLine.quantity_ordered,
+              receivedBy: user?.id,
+              location: locationScan || putawaySuggestion.locationCode,
+            },
+          },
+        });
+      } catch (e) {
+        console.warn("CoreERP receipt confirmation failed (non-blocking):", e);
+      }
     },
     onSuccess: () => {
       toast.success("Batch received and put away successfully");
@@ -271,8 +319,16 @@ const Receiving = () => {
                 </div>
                 <div className="space-y-2">
                   <Label>Expiry Date</Label>
-                  <Input type="date" value={expiryDate} onChange={(e) => setExpiryDate(e.target.value)} />
+                  <Input type="date" value={expiryDate} onChange={(e) => validateShelfLife(e.target.value)} />
                 </div>
+                {shelfLifeWarning && (
+                  <div className="col-span-2">
+                    <Alert variant={shelfLifeWarning.startsWith("⛔") ? "destructive" : "default"} className="py-2">
+                      <AlertTriangleIcon className="h-4 w-4" />
+                      <AlertDescription className="text-sm">{shelfLifeWarning}</AlertDescription>
+                    </Alert>
+                  </div>
+                )}
                 <div className="col-span-2 space-y-2">
                   <Label className="flex items-center gap-1"><Camera className="h-4 w-4" /> Batch Label Photo</Label>
                   <Input type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} />
@@ -283,7 +339,7 @@ const Receiving = () => {
                   )}
                 </div>
               </div>
-              <Button onClick={handleConfirmBatch} className="mt-2" disabled={!expiryDate}>Confirm & Suggest Putaway</Button>
+              <Button onClick={handleConfirmBatch} className="mt-2" disabled={!expiryDate || shelfLifeWarning?.startsWith("⛔")}>Confirm & Suggest Putaway</Button>
             </div>
           )}
 

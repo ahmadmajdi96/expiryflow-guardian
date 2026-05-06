@@ -35,6 +35,7 @@ const Dashboard = () => {
         .order("expiry_date", { ascending: true });
       return data ?? [];
     },
+    refetchInterval: 300000, // 5 min auto-refresh
   });
 
   const { data: quarantinedCount } = useQuery({
@@ -74,7 +75,7 @@ const Dashboard = () => {
     { label: "Avg. Days to Expiry", value: avgDays, icon: Clock, trend: "Across active stock" },
     { label: "Quarantined", value: String(quarantinedCount ?? 0), icon: ShieldAlert, trend: "Excluded from sale" },
     { label: "Markdowns Active", value: String(proposalCount ?? 0), icon: TrendingDown, trend: "Pending + approved" },
-    { label: "FEFO Compliance", value: "99.2%", icon: CheckCircle, trend: "Last 30 days" },
+    { label: "FEFO Compliance", value: enriched.length > 0 ? `${Math.max(0, Math.round(((enriched.length - nearExpiry.length) / enriched.length) * 100))}%` : "N/A", icon: CheckCircle, trend: "Batches in green/yellow zone" },
   ];
 
   const recentAlerts = enriched.filter((b) => b.zone !== "GREEN");
