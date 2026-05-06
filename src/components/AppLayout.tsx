@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Boxes, LayoutDashboard, AlertTriangle, ScanBarcode, ClipboardCheck,
   ArrowRightLeft, Settings, LogOut, Shield, Tag, PackageSearch, ScrollText,
-  Package, Store, Users, Menu
+  Package, Store, Users, Menu, ArrowDownToLine, ArrowUpFromLine
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/hooks/useRole";
@@ -22,6 +22,8 @@ const sections: NavSection[] = [
       { to: "/receiving", label: "Receiving & Putaway", icon: ScanBarcode },
       { to: "/pick-requests", label: "Pick Requests", icon: PackageSearch },
       { to: "/markdown-approvals", label: "Markdown Approvals", icon: Tag },
+      { to: "/inbound-orders", label: "Inbound Orders", icon: ArrowDownToLine },
+      { to: "/outbound-orders", label: "Outbound Orders", icon: ArrowUpFromLine },
     ],
   },
   {
@@ -37,6 +39,9 @@ const sections: NavSection[] = [
     items: [
       { to: "/settings", label: "Alert Settings", icon: Settings },
       { to: "/webhook-log", label: "Webhook Log", icon: ScrollText },
+      { to: "/products", label: "Products", icon: Package },
+      { to: "/stores", label: "Stores", icon: Store },
+      { to: "/users", label: "Users", icon: Users },
     ],
   },
 ];

@@ -6,8 +6,8 @@ export type AppRole = "warehouse_clerk" | "qc_inspector" | "store_manager" | "ad
 
 const ROLE_PERMISSIONS: Record<AppRole, string[]> = {
   warehouse_clerk: ["/", "/receiving", "/pick-requests", "/transfers"],
-  qc_inspector: ["/", "/qc-inspection", "/quarantine"],
-  store_manager: ["/", "/expiry-alerts", "/receiving", "/pick-requests", "/qc-inspection", "/quarantine", "/transfers", "/markdown-approvals", "/settings", "/webhook-log"],
+  qc_inspector: ["/", "/qc-inspection", "/quarantine", "/inbound-orders"],
+  store_manager: ["/", "/expiry-alerts", "/receiving", "/pick-requests", "/qc-inspection", "/quarantine", "/transfers", "/markdown-approvals", "/settings", "/webhook-log", "/inbound-orders", "/outbound-orders", "/products", "/stores"],
   admin: ["*"],
 };
 

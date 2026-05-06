@@ -135,6 +135,87 @@ export type Database = {
         }
         Relationships: []
       }
+      inbound_order_lines: {
+        Row: {
+          created_at: string
+          id: string
+          inbound_order_id: string
+          product_id: string
+          quantity_ordered: number
+          quantity_received: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inbound_order_id: string
+          product_id: string
+          quantity_ordered?: number
+          quantity_received?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inbound_order_id?: string
+          product_id?: string
+          quantity_ordered?: number
+          quantity_received?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbound_order_lines_inbound_order_id_fkey"
+            columns: ["inbound_order_id"]
+            isOneToOne: false
+            referencedRelation: "inbound_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbound_order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbound_orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expected_date: string | null
+          id: string
+          notes: string | null
+          order_number: string
+          order_type: string
+          status: string
+          supplier_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expected_date?: string | null
+          id?: string
+          notes?: string | null
+          order_number: string
+          order_type?: string
+          status?: string
+          supplier_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expected_date?: string | null
+          id?: string
+          notes?: string | null
+          order_number?: string
+          order_type?: string
+          status?: string
+          supplier_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       inventory_batches: {
         Row: {
           batch_number: string
@@ -290,6 +371,108 @@ export type Database = {
             columns: ["batch_id"]
             isOneToOne: false
             referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outbound_order_lines: {
+        Row: {
+          batch_id: string | null
+          created_at: string
+          id: string
+          outbound_order_id: string
+          product_id: string
+          quantity_ordered: number
+          quantity_picked: number
+        }
+        Insert: {
+          batch_id?: string | null
+          created_at?: string
+          id?: string
+          outbound_order_id: string
+          product_id: string
+          quantity_ordered?: number
+          quantity_picked?: number
+        }
+        Update: {
+          batch_id?: string | null
+          created_at?: string
+          id?: string
+          outbound_order_id?: string
+          product_id?: string
+          quantity_ordered?: number
+          quantity_picked?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_order_lines_batch_id_fkey"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outbound_order_lines_outbound_order_id_fkey"
+            columns: ["outbound_order_id"]
+            isOneToOne: false
+            referencedRelation: "outbound_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outbound_order_lines_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outbound_orders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customer_name: string | null
+          destination_store_id: string | null
+          id: string
+          notes: string | null
+          order_number: string
+          order_type: string
+          ship_date: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customer_name?: string | null
+          destination_store_id?: string | null
+          id?: string
+          notes?: string | null
+          order_number: string
+          order_type?: string
+          ship_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customer_name?: string | null
+          destination_store_id?: string | null
+          id?: string
+          notes?: string | null
+          order_number?: string
+          order_type?: string
+          ship_date?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_orders_destination_store_id_fkey"
+            columns: ["destination_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
             referencedColumns: ["id"]
           },
         ]
