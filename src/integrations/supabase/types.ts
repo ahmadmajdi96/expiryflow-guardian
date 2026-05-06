@@ -186,6 +186,27 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_inventory_batches_po_line"
+            columns: ["po_line_id"]
+            isOneToOne: false
+            referencedRelation: "po_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_inventory_batches_product"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_inventory_batches_store"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inventory_batches_po_line_id_fkey"
             columns: ["po_line_id"]
             isOneToOne: false
@@ -263,7 +284,15 @@ export type Database = {
           status?: string
           urgency?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_markdown_proposals_batch"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pick_exceptions: {
         Row: {
@@ -314,7 +343,29 @@ export type Database = {
           resolved_by?: string | null
           status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_pick_exceptions_batch"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pick_exceptions_line"
+            columns: ["original_line_id"]
+            isOneToOne: false
+            referencedRelation: "pick_request_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pick_exceptions_pick"
+            columns: ["pick_request_id"]
+            isOneToOne: false
+            referencedRelation: "pick_requests"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pick_request_lines: {
         Row: {
@@ -351,6 +402,20 @@ export type Database = {
           scanned_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_pick_request_lines_batch"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pick_request_lines_pick"
+            columns: ["pick_request_id"]
+            isOneToOne: false
+            referencedRelation: "pick_requests"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pick_request_lines_pick_request_id_fkey"
             columns: ["pick_request_id"]
@@ -397,7 +462,22 @@ export type Database = {
           status?: string
           store_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_pick_requests_product"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_pick_requests_store"
+            columns: ["store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       po_lines: {
         Row: {
@@ -425,6 +505,20 @@ export type Database = {
           quantity_received?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_po_lines_po"
+            columns: ["po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_po_lines_product"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "po_lines_po_id_fkey"
             columns: ["po_id"]
@@ -540,6 +634,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_qc_inspections_batch"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "qc_inspections_batch_id_fkey"
             columns: ["batch_id"]
             isOneToOne: false
@@ -586,6 +687,27 @@ export type Database = {
           transfer_code?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_stock_transfers_batch"
+            columns: ["batch_id"]
+            isOneToOne: false
+            referencedRelation: "inventory_batches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_stock_transfers_from_store"
+            columns: ["from_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_stock_transfers_to_store"
+            columns: ["to_store_id"]
+            isOneToOne: false
+            referencedRelation: "stores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "stock_transfers_batch_id_fkey"
             columns: ["batch_id"]
