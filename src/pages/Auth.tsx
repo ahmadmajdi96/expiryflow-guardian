@@ -59,15 +59,8 @@ const Auth = () => {
       if (signUpErr && !signUpErr.message.toLowerCase().includes("registered")) {
         setBusy(false); return toast.error(signUpErr.message);
       }
-      // Sign in after signup
+      // Sign in after signup — role is auto-assigned by server-side trigger
       ({ error } = await supabase.auth.signInWithPassword({ email: account.email, password: DEMO_PASSWORD }));
-      if (!error) {
-        // Assign role after first sign-in
-        const { data: { user: newUser } } = await supabase.auth.getUser();
-        if (newUser) {
-          await supabase.from("user_roles").insert({ user_id: newUser.id, role: account.role as any });
-        }
-      }
     }
     setBusy(false);
     if (error) return toast.error(error.message);
