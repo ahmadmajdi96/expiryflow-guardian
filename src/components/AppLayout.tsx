@@ -42,7 +42,7 @@ const sections: NavSection[] = [
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, loading, signOut } = useAuth();
-  const { canAccess } = useRole();
+  const { canAccess, roles } = useRole();
   const location = useLocation();
   if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
@@ -88,7 +88,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold truncate text-sidebar-foreground">{user.email}</div>
-              <div className="text-[10px] truncate" style={{ color: "hsl(var(--sidebar-muted))" }}>Warehouse Operator</div>
+              <div className="text-[10px] truncate capitalize" style={{ color: "hsl(var(--sidebar-muted))" }}>{roles.length > 0 ? roles.map(r => r.replace(/_/g, " ")).join(", ") : "No role"}</div>
             </div>
           </div>
           <Button
