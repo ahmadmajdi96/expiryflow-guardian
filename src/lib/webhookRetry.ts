@@ -77,7 +77,7 @@ async function logWebhookAttempt(
   error: string | null
 ) {
   try {
-    await supabase.from("webhook_log").insert({
+    await (supabase.from as any)("webhook_log").insert({
       direction: "OUT",
       event_type: payload.event,
       payload: { ...payload.data, idempotencyKey: payload.idempotencyKey, attempt },
