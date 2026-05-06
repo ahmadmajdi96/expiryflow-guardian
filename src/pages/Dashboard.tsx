@@ -2,10 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
-import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle, Search } from "lucide-react";
+import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useState } from "react";
-import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
+import { DataTable, DataTableColumn } from "@/components/DataTable";
 
 const zoneClass: Record<string, string> = {
   GREEN: "zone-green", YELLOW: "zone-yellow", ORANGE: "zone-orange", RED: "zone-red", BLACK: "zone-black"
@@ -21,6 +20,8 @@ function getZone(daysLeft: number) {
   if (daysLeft <= 30) return "YELLOW";
   return "GREEN";
 }
+
+type EnrichedBatch = any & { daysLeft: number; zone: string };
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -59,7 +60,7 @@ const Dashboard = () => {
   });
 
   const today = new Date();
-  const enriched = (batches ?? []).map((b) => {
+  const enriched: EnrichedBatch[] = (batches ?? []).map((b) => {
     const days = Math.ceil((new Date(b.expiry_date).getTime() - today.getTime()) / 86400000);
     return { ...b, daysLeft: days, zone: getZone(days) };
   });
@@ -76,11 +77,17 @@ const Dashboard = () => {
     { label: "FEFO Compliance", value: "99.2%", icon: CheckCircle, trend: "Last 30 days" },
   ];
 
-  const recentAlerts = enriched.filter((b) => b.zone !== "GREEN").slice(0, 10);
-  const [search, setSearch] = useState("");
-  const searchedAlerts = recentAlerts.filter((a) =>
-    matchesSearch(a, search, ["batch_number", "products.sku", "products.name", "stores.store_code"])
-  );
+  const recentAlerts = enriched.filter((b) => b.zone !== "GREEN");
+
+  const columns: DataTableColumn<EnrichedBatch>[] = [
+    { key: "sku", header: "SKU", accessor: (r) => r.products?.sku, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs">{r.products?.sku}</span> },
+    { key: "batch_number", header: "Batch #", accessor: (r) => r.batch_number, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs">{r.batch_number}</span> },
+    { key: "store", header: "Store", accessor: (r) => r.stores?.store_code, sortable: true, filter: "select" },
+    { key: "quantity", header: "Qty", accessor: (r) => r.quantity, sortable: true, align: "right", cell: (r) => <span className="tabular-nums">{r.quantity}</span> },
+    { key: "expiry_date", header: "Expiry", accessor: (r) => r.expiry_date, sortable: true, filter: "date", cell: (r) => <span className="font-mono text-xs">{r.expiry_date}</span> },
+    { key: "daysLeft", header: "Days Left", accessor: (r) => r.daysLeft, sortable: true, align: "right", cell: (r) => <span className="tabular-nums font-semibold">{r.daysLeft}</span> },
+    { key: "zone", header: "Zone", accessor: (r) => r.zone, filter: "select", cell: (r) => <span className={`pill ${zoneClass[r.zone]}`}>{zoneEmoji[r.zone]} {r.zone}</span> },
+  ];
 
   return (
     <>
@@ -103,55 +110,23 @@ const Dashboard = () => {
         ))}
       </div>
 
-      <div className="page-section">
-        <div className="px-5 py-4 border-b border-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-lg">Recent Expiry Alerts</h2>
-              <p className="text-sm text-muted-foreground">Items entering warning zones across all stores</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-64">
-                <DataTableFilter value={search} onChange={setSearch} placeholder="Search SKU, batch, store…" />
-              </div>
-              <Link to="/expiry-alerts" className="text-xs text-primary hover:underline whitespace-nowrap">View all →</Link>
-            </div>
-          </div>
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <h2 className="font-semibold text-lg">Recent Expiry Alerts</h2>
+          <p className="text-sm text-muted-foreground">Items entering warning zones across all stores</p>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-5 py-3 font-medium text-muted-foreground">SKU</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Batch #</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Store</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Qty</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Expiry</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Days Left</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Zone</th>
-              </tr>
-            </thead>
-            <tbody>
-              {searchedAlerts.map((a) => (
-                <tr key={a.id} className="table-row-hover border-b border-border/50 cursor-pointer" onClick={() => navigate(`/batch/${a.id}`)}>
-                  <td className="px-5 py-3 font-mono text-xs">{(a as any).products?.sku}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{a.batch_number}</td>
-                  <td className="px-5 py-3">{(a as any).stores?.store_code}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{a.quantity}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{a.expiry_date}</td>
-                  <td className="px-5 py-3 text-right tabular-nums font-semibold">{a.daysLeft}</td>
-                  <td className="px-5 py-3">
-                    <span className={`pill ${zoneClass[a.zone]}`}>{zoneEmoji[a.zone]} {a.zone}</span>
-                  </td>
-                </tr>
-              ))}
-              {searchedAlerts.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">No alerts — all stock in green zone</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Link to="/expiry-alerts" className="text-xs text-primary hover:underline whitespace-nowrap">View all →</Link>
       </div>
+      <DataTable
+        rows={recentAlerts}
+        columns={columns}
+        rowKey={(r) => r.id}
+        exportFilename="dashboard-alerts"
+        tableId="dash-alerts"
+        onRowClick={(r) => navigate(`/batch/${r.id}`)}
+        emptyMessage="No alerts — all stock in green zone"
+        pageSize={10}
+      />
     </>
   );
 };
