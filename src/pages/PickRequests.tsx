@@ -14,6 +14,7 @@ import { getFEFOPickingSuggestion, type FEFOSuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DataTable, DataTableColumn } from "@/components/DataTable";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" },
@@ -40,6 +41,7 @@ const PickRequests = () => {
   const [exceptionReason, setExceptionReason] = useState("");
   const [showExceptions, setShowExceptions] = useState(false);
   const [scannedLineIds, setScannedLineIds] = useState<Set<string>>(new Set());
+  const [expiryWarnings, setExpiryWarnings] = useState<Record<string, { status: string; zone: string; daysLeft: number }>>({});
 
   const { data: picks } = useQuery({
     queryKey: ["pick-requests"],
@@ -127,6 +129,7 @@ const PickRequests = () => {
 
   const handleScanBatch = async () => {
     if (!scanInput || !pickingId) return;
+
     // Block wrong batch (not in pick at all)
     const anyMatch = pickLines.find((l: any) => l.inventory_batches?.batch_number === scanInput);
     if (!anyMatch) {
@@ -171,6 +174,31 @@ const PickRequests = () => {
       quantity: remaining <= 0 ? 0 : remaining,
       status: remaining <= 0 ? "DEPLETED" : "AVAILABLE",
     }).eq("id", line.batch_id);
+
+    // FEFO expiry validation via check-expiry endpoint
+    try {
+      const batchInfo = line.inventory_batches;
+      const pickReq = (picks ?? []).find((p: any) => p.id === pickingId);
+      const { data: expiryCheck } = await supabase.functions.invoke("check-expiry", {
+        body: {
+          sku: pickReq?.products?.sku,
+          batch: batchInfo?.batch_number,
+          storeId: pickReq?.store_id,
+        },
+      });
+      if (expiryCheck) {
+        const checkResult = typeof expiryCheck === "string" ? JSON.parse(expiryCheck) : expiryCheck;
+        if (checkResult.status === "BLOCKED") {
+          toast.error(`⛔ Batch ${scanInput} is BLOCKED — expired or in black zone. Undo pick and raise exception.`, { duration: 8000 });
+          setExpiryWarnings((prev) => ({ ...prev, [line.id]: checkResult }));
+        } else if (checkResult.status === "WARNING") {
+          toast.warning(`⚠️ Batch ${scanInput}: ${checkResult.daysLeft} days left (${checkResult.zone} zone). Proceed with caution.`, { duration: 6000 });
+          setExpiryWarnings((prev) => ({ ...prev, [line.id]: checkResult }));
+        }
+      }
+    } catch (err) {
+      console.warn("[FEFO] Expiry check failed (non-blocking):", err);
+    }
 
     // Log FEFO allocation
     await supabase.from("fefo_allocation_log").insert({
