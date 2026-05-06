@@ -83,7 +83,6 @@ const ExpiryAlerts = () => {
     },
     onSuccess: (proposals) => {
       toast.success(`${proposals.length} markdown proposals created. Go to Markdown Approvals to review.`);
-      setSelected([]);
       queryClient.invalidateQueries({ queryKey: ["markdown-proposals"] });
     },
     onError: (e: any) => toast.error(e.message || "Failed to generate proposals"),
