@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle as AlertTriangleIcon } from "lucide-react";
 import { WifiOff, Wifi, CloudUpload } from "lucide-react";
 import { queueOfflineReceiving, syncPendingItems, getQueueCount, isOnline } from "@/lib/offlineReceiving";
+import { sendWebhookWithRetry } from "@/lib/webhookRetry";
 
 const Receiving = () => {
   const { user } = useAuth();
@@ -40,11 +41,19 @@ const Receiving = () => {
   useState(() => {
     const handleOnline = async () => {
       setOnline(true);
-      const synced = await syncPendingItems();
-      if (synced > 0) {
-        toast.success(`Synced ${synced} offline receiving records`);
+      const result = await syncPendingItems();
+      if (result.synced > 0) {
+        toast.success(`Synced ${result.synced} offline receiving records`);
         queryClient.invalidateQueries({ queryKey: ["receiving-po"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
+      }
+      if (result.conflicts.length > 0) {
+        for (const c of result.conflicts) {
+          toast.warning(c.reason, { duration: 8000 });
+        }
+      }
+      if (result.failed > 0) {
+        toast.error(`${result.failed} items failed to sync — will retry later.`);
       }
       setOfflineCount(await getQueueCount());
     };
@@ -220,21 +229,24 @@ const Receiving = () => {
         allocated_by: user?.id,
       });
 
-      // Send receipt confirmation to CoreERP webhook
+      // Send receipt confirmation to CoreERP with idempotent retry
+      const idempotencyKey = `receipt-${poData?.po_number}-${selectedLine.id}-${batchNum}`;
       try {
-        await supabase.functions.invoke("coreerp-po-webhook", {
-          body: {
-            event: "receipt.confirmed",
-            data: {
-              poNumber: poData?.po_number,
-              sku: selectedLine.products?.sku,
-              batchNumber: batchNumber || `B${new Date().toISOString().slice(0,10).replace(/-/g,"")}`,
-              quantityReceived: Number(receivedQty) || selectedLine.quantity_ordered,
-              receivedBy: user?.id,
-              location: locationScan || putawaySuggestion.locationCode,
-            },
+        const webhookResult = await sendWebhookWithRetry({
+          event: "receipt.confirmed",
+          idempotencyKey,
+          data: {
+            poNumber: poData?.po_number,
+            sku: selectedLine.products?.sku,
+            batchNumber: batchNum,
+            quantityReceived: qty,
+            receivedBy: user?.id,
+            location: loc,
           },
         });
+        if (!webhookResult.success) {
+          toast.warning(`CoreERP notification failed after ${webhookResult.attempts} attempts. Receipt saved locally.`, { duration: 6000 });
+        }
       } catch (e) {
         console.warn("CoreERP receipt confirmation failed (non-blocking):", e);
       }

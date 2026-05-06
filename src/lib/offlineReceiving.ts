@@ -25,6 +25,18 @@ export interface OfflineReceivingItem {
   synced: boolean;
 }
 
+export interface SyncConflict {
+  item: OfflineReceivingItem;
+  reason: string;
+  serverBatchNumber?: string;
+}
+
+export interface SyncResult {
+  synced: number;
+  conflicts: SyncConflict[];
+  failed: number;
+}
+
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
@@ -88,13 +100,71 @@ export function isOnline(): boolean {
  * Sync all pending items to Supabase.
  * Returns number of successfully synced items.
  */
-export async function syncPendingItems(): Promise<number> {
-  if (!isOnline()) return 0;
+export async function clearSynced(): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.getAll();
+    req.onsuccess = () => {
+      const items = (req.result ?? []) as OfflineReceivingItem[];
+      for (const item of items) {
+        if (item.synced) store.delete(item.id);
+      }
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function syncPendingItems(): Promise<SyncResult> {
+  if (!isOnline()) return { synced: 0, conflicts: [], failed: 0 };
   const { supabase } = await import("@/integrations/supabase/client");
   const pending = await getPendingItems();
   let synced = 0;
+  const conflicts: SyncConflict[] = [];
+  let failed = 0;
+
   for (const item of pending) {
     try {
+      // Check for duplicate batch_number (conflict detection)
+      const { data: existing } = await supabase
+        .from("inventory_batches")
+        .select("id, batch_number")
+        .eq("batch_number", item.payload.batch_number)
+        .eq("product_id", item.payload.product_id)
+        .eq("store_id", item.payload.store_id)
+        .maybeSingle();
+
+      if (existing) {
+        // Duplicate — mark as conflict but mark synced to stop retrying
+        conflicts.push({
+          item,
+          reason: `Batch ${item.payload.batch_number} already exists on server (likely synced by another device).`,
+          serverBatchNumber: existing.batch_number,
+        });
+        await markSynced(item.id);
+        continue;
+      }
+
+      // Check PO line to avoid over-receiving
+      if (item.payload.po_line_id) {
+        const { data: poLine } = await supabase
+          .from("po_lines")
+          .select("quantity_ordered, quantity_received")
+          .eq("id", item.payload.po_line_id)
+          .maybeSingle();
+
+        if (poLine && poLine.quantity_received >= poLine.quantity_ordered) {
+          conflicts.push({
+            item,
+            reason: `PO line already fully received (${poLine.quantity_received}/${poLine.quantity_ordered}). Offline receipt of ${item.payload.quantity} skipped.`,
+          });
+          await markSynced(item.id);
+          continue;
+        }
+      }
+
       const { error } = await supabase.from("inventory_batches").insert({
         batch_number: item.payload.batch_number,
         product_id: item.payload.product_id,
@@ -107,14 +177,36 @@ export async function syncPendingItems(): Promise<number> {
         received_by: item.payload.received_by,
         status: "AVAILABLE",
         qc_status: "PENDING",
-      });
+      } as any);
+
       if (!error) {
+        // Update PO line received qty
+        if (item.payload.po_line_id) {
+          const { data: poLine } = await supabase
+            .from("po_lines")
+            .select("quantity_received")
+            .eq("id", item.payload.po_line_id)
+            .maybeSingle();
+          if (poLine) {
+            await supabase.from("po_lines").update({
+              quantity_received: (poLine.quantity_received ?? 0) + item.payload.quantity,
+            }).eq("id", item.payload.po_line_id);
+          }
+        }
         await markSynced(item.id);
         synced++;
+      } else {
+        console.warn(`[OfflineSync] Failed to sync ${item.id}:`, error.message);
+        failed++;
       }
-    } catch {
-      // Will retry on next sync
+    } catch (err) {
+      console.warn(`[OfflineSync] Exception syncing ${item.id}:`, err);
+      failed++;
     }
   }
-  return synced;
+
+  // Clean up old synced items
+  await clearSynced();
+
+  return { synced, conflicts, failed };
 }
