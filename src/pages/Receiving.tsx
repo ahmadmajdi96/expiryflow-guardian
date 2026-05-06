@@ -187,6 +187,13 @@ const Receiving = () => {
               }
               setStep(s.n);
             }}
+            onClick={() => {
+              if (s.n >= 2 && !poData && !poNumber.trim()) {
+                toast.error("Load a PO first.");
+                return;
+              }
+              setStep(s.n);
+            }}
             >
               <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                 step > s.n ? "bg-success text-success-foreground" : step === s.n ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
