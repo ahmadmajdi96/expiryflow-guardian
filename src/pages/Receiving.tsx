@@ -14,6 +14,8 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertTriangle as AlertTriangleIcon } from "lucide-react";
+import { WifiOff, Wifi, CloudUpload } from "lucide-react";
+import { queueOfflineReceiving, syncPendingItems, getQueueCount, isOnline } from "@/lib/offlineReceiving";
 
 const Receiving = () => {
   const { user } = useAuth();
@@ -31,6 +33,30 @@ const Receiving = () => {
   const [labelPhoto, setLabelPhoto] = useState<File | null>(null);
   const [labelPreview, setLabelPreview] = useState<string | null>(null);
   const [shelfLifeWarning, setShelfLifeWarning] = useState<string | null>(null);
+  const [online, setOnline] = useState(navigator.onLine);
+  const [offlineCount, setOfflineCount] = useState(0);
+
+  // Track online/offline status
+  useState(() => {
+    const handleOnline = async () => {
+      setOnline(true);
+      const synced = await syncPendingItems();
+      if (synced > 0) {
+        toast.success(`Synced ${synced} offline receiving records`);
+        queryClient.invalidateQueries({ queryKey: ["receiving-po"] });
+        queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
+      }
+      setOfflineCount(await getQueueCount());
+    };
+    const handleOffline = () => setOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    getQueueCount().then(setOfflineCount);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  });
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -125,6 +151,30 @@ const Receiving = () => {
     mutationFn: async () => {
       if (!selectedLine || !putawaySuggestion) throw new Error("Missing data");
       const storeId = "a1000000-0000-0000-0000-000000000001";
+      const batchNum = batchNumber || `B${new Date().toISOString().slice(0,10).replace(/-/g,"")}`;
+      const qty = Number(receivedQty) || selectedLine.quantity_ordered;
+      const loc = locationScan || putawaySuggestion.locationCode;
+
+      // Offline mode: queue to IndexedDB
+      if (!isOnline()) {
+        await queueOfflineReceiving({
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          payload: {
+            batch_number: batchNum,
+            product_id: selectedLine.product_id,
+            store_id: storeId,
+            quantity: qty,
+            expiry_date: expiryDate,
+            manufacturing_date: mfgDate || null,
+            location: loc,
+            po_line_id: selectedLine.id,
+            received_by: user?.id ?? null,
+          },
+        });
+        setOfflineCount(await getQueueCount());
+        return;
+      }
 
       // Upload label photo if provided
       let labelImageUrl: string | null = null;
@@ -141,15 +191,15 @@ const Receiving = () => {
 
       // Create inventory batch
       await supabase.from("inventory_batches").insert({
-        batch_number: batchNumber || `B${new Date().toISOString().slice(0,10).replace(/-/g,"")}`,
+        batch_number: batchNum,
         product_id: selectedLine.product_id,
         store_id: storeId,
-        quantity: Number(receivedQty) || selectedLine.quantity_ordered,
+        quantity: qty,
         expiry_date: expiryDate,
         manufacturing_date: mfgDate || null,
-        location: locationScan || putawaySuggestion.locationCode,
+        location: loc,
         status: "AVAILABLE",
-        qc_status: "PASSED",
+        qc_status: "PENDING",
         po_line_id: selectedLine.id,
         received_by: user?.id,
         ...(labelImageUrl ? { label_image_url: labelImageUrl } : {}),
@@ -157,7 +207,7 @@ const Receiving = () => {
 
       // Update PO line received qty
       await supabase.from("po_lines").update({
-        quantity_received: selectedLine.quantity_received + (Number(receivedQty) || selectedLine.quantity_ordered),
+        quantity_received: selectedLine.quantity_received + qty,
       }).eq("id", selectedLine.id);
 
       // Log FEFO allocation
@@ -190,7 +240,7 @@ const Receiving = () => {
       }
     },
     onSuccess: () => {
-      toast.success("Batch received and put away successfully");
+      toast.success(isOnline() ? "Batch received and put away successfully" : "Batch queued offline — will sync when connection returns");
       queryClient.invalidateQueries({ queryKey: ["receiving-po"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
       // Route to QC Inspection filtered by the batch just received
@@ -205,6 +255,20 @@ const Receiving = () => {
         title="Receiving & Putaway"
         description="PO-based receiving workflow with batch/expiry capture and FEFO putaway logic."
         badge={<Badge variant="outline" className="text-xs">Step {step} of 4</Badge>}
+      rightContent={
+        <div className="flex items-center gap-2">
+          {!online && (
+            <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-xs">
+              <WifiOff className="h-3 w-3 mr-1" /> Offline Mode
+            </Badge>
+          )}
+          {offlineCount > 0 && (
+            <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 text-xs">
+              <CloudUpload className="h-3 w-3 mr-1" /> {offlineCount} queued
+            </Badge>
+          )}
+        </div>
+      }
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/qc-inspection")}>QC Inspection</Button>
