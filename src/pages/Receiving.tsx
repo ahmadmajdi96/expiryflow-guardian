@@ -40,11 +40,19 @@ const Receiving = () => {
   useState(() => {
     const handleOnline = async () => {
       setOnline(true);
-      const synced = await syncPendingItems();
-      if (synced > 0) {
-        toast.success(`Synced ${synced} offline receiving records`);
+      const result = await syncPendingItems();
+      if (result.synced > 0) {
+        toast.success(`Synced ${result.synced} offline receiving records`);
         queryClient.invalidateQueries({ queryKey: ["receiving-po"] });
         queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
+      }
+      if (result.conflicts.length > 0) {
+        for (const c of result.conflicts) {
+          toast.warning(c.reason, { duration: 8000 });
+        }
+      }
+      if (result.failed > 0) {
+        toast.error(`${result.failed} items failed to sync — will retry later.`);
       }
       setOfflineCount(await getQueueCount());
     };
