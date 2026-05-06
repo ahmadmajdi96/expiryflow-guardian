@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Tag } from "lucide-react";
+import { Tag } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
-import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
+import { DataTable, DataTableColumn } from "@/components/DataTable";
 
 const zoneClass: Record<string, string> = { GREEN: "zone-green", YELLOW: "zone-yellow", ORANGE: "zone-orange", RED: "zone-red", BLACK: "zone-black" };
 const zoneEmoji: Record<string, string> = { GREEN: "🟢", YELLOW: "🟡", ORANGE: "🟠", RED: "🔴", BLACK: "⚫" };
@@ -21,10 +21,6 @@ function getZone(daysLeft: number) {
 }
 
 const ExpiryAlerts = () => {
-  const [storeFilter, setStoreFilter] = useState("all");
-  const [zoneFilter, setZoneFilter] = useState("all");
-  const [selected, setSelected] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -41,30 +37,11 @@ const ExpiryAlerts = () => {
     },
   });
 
-  const { data: stores } = useQuery({
-    queryKey: ["stores"],
-    queryFn: async () => {
-      const { data } = await supabase.from("stores").select("store_code").order("store_code");
-      return data ?? [];
-    },
-  });
-
   const today = new Date();
   const enriched = (batches ?? []).map((b) => {
     const days = Math.ceil((new Date(b.expiry_date).getTime() - today.getTime()) / 86400000);
     return { ...b, daysLeft: days, zone: getZone(days) };
-  }).filter((b) => b.zone !== "GREEN"); // only show warning zones
-
-  const filtered = enriched.filter((a) => {
-    if (storeFilter !== "all" && (a as any).stores?.store_code !== storeFilter) return false;
-    if (zoneFilter !== "all" && a.zone !== zoneFilter) return false;
-    if (!matchesSearch(a, search, ["batch_number", "products.sku", "products.name"])) return false;
-    return true;
-  });
-
-  const toggleSelect = useCallback((id: string) => {
-    setSelected((prev) => prev.includes(id) ? prev.filter((b) => b !== id) : [...prev, id]);
-  }, []);
+  }).filter((b) => b.zone !== "GREEN");
 
   const proposeMutation = useMutation({
     mutationFn: async (batchIds: string[]) => {
@@ -106,113 +83,54 @@ const ExpiryAlerts = () => {
     },
     onSuccess: (proposals) => {
       toast.success(`${proposals.length} markdown proposals created. Go to Markdown Approvals to review.`);
-      setSelected([]);
       queryClient.invalidateQueries({ queryKey: ["markdown-proposals"] });
     },
     onError: (e: any) => toast.error(e.message || "Failed to generate proposals"),
   });
+
+  const columns: DataTableColumn<any>[] = [
+    { key: "sku", header: "SKU", accessor: (r) => r.products?.sku, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs">{r.products?.sku}</span> },
+    { key: "product", header: "Product", accessor: (r) => r.products?.name, sortable: true, filter: "text", cell: (r) => <span className="font-medium">{r.products?.name}</span> },
+    { key: "batch_number", header: "Batch #", accessor: (r) => r.batch_number, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs">{r.batch_number}</span> },
+    { key: "store", header: "Store", accessor: (r) => r.stores?.store_code, sortable: true, filter: "select" },
+    { key: "quantity", header: "Qty", accessor: (r) => r.quantity, sortable: true, align: "right", cell: (r) => <span className="tabular-nums">{r.quantity}</span> },
+    { key: "expiry_date", header: "Expiry", accessor: (r) => r.expiry_date, sortable: true, filter: "date", cell: (r) => <span className="font-mono text-xs">{r.expiry_date}</span> },
+    { key: "daysLeft", header: "Days Left", accessor: (r) => r.daysLeft, sortable: true, align: "right", cell: (r) => <span className="tabular-nums font-semibold">{r.daysLeft}</span> },
+    { key: "price", header: "Price", accessor: (r) => Number(r.products?.current_price ?? 0), sortable: true, align: "right", cell: (r) => <span className="tabular-nums">${Number(r.products?.current_price ?? 0).toFixed(2)}</span> },
+    { key: "zone", header: "Zone", accessor: (r) => r.zone, filter: "select", options: ["YELLOW", "ORANGE", "RED", "BLACK"], cell: (r) => <span className={`pill ${zoneClass[r.zone]}`}>{zoneEmoji[r.zone]} {r.zone}</span> },
+    { key: "action", header: "Action", accessor: () => "", exportable: false, cell: (r) => (
+      <div className="flex gap-1">
+        <Button variant="outline" size="sm" className="text-xs h-7" disabled={proposeMutation.isPending} onClick={(e) => { e.stopPropagation(); proposeMutation.mutate([r.id]); }}>
+          {r.zone === "RED" || r.zone === "BLACK" ? "Urgent Clear" : "Propose MD"}
+        </Button>
+        <Button variant="ghost" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); navigate(`/batch/${r.id}`); }}>View</Button>
+      </div>
+    )},
+  ];
 
   return (
     <>
       <PageHeader
         title="Near-Expiry Alerts"
         description="Monitor and act on stock approaching expiry across all stores. Auto-refreshes every 5 minutes."
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-1" /> Export CSV</Button>
-            <Button
-              size="sm"
-              disabled={selected.length === 0 || proposeMutation.isPending}
-              onClick={() => proposeMutation.mutate(selected)}
-            >
-              <Tag className="h-4 w-4 mr-1" /> {proposeMutation.isPending ? "Generating…" : `Propose Markdown (${selected.length})`}
-            </Button>
-          </div>
-        }
       />
-
-      <div className="flex gap-3 mb-4">
-        <div className="w-64">
-          <DataTableFilter value={search} onChange={setSearch} placeholder="Search SKU, batch, product…" />
-        </div>
-        <Select value={storeFilter} onValueChange={setStoreFilter}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Store" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Stores</SelectItem>
-            {(stores ?? []).map((s) => (
-              <SelectItem key={s.store_code} value={s.store_code}>{s.store_code}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={zoneFilter} onValueChange={setZoneFilter}>
-          <SelectTrigger className="w-40"><SelectValue placeholder="Zone" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Zones</SelectItem>
-            <SelectItem value="YELLOW">🟡 Yellow</SelectItem>
-            <SelectItem value="ORANGE">🟠 Orange</SelectItem>
-            <SelectItem value="RED">🔴 Red</SelectItem>
-            <SelectItem value="BLACK">⚫ Black</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="page-section">
-        {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading…</div>
-        ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-5 py-3 w-10"></th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">SKU</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Product</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Batch #</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Store</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Qty</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Expiry</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Days Left</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Price</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Zone</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((a) => (
-                <tr key={a.id} className="table-row-hover border-b border-border/50">
-                  <td className="px-5 py-3">
-                    <input type="checkbox" checked={selected.includes(a.id)} onChange={() => toggleSelect(a.id)} className="rounded border-border" />
-                  </td>
-                  <td className="px-5 py-3 font-mono text-xs">{(a as any).products?.sku}</td>
-                  <td className="px-5 py-3 font-medium">{(a as any).products?.name}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{a.batch_number}</td>
-                  <td className="px-5 py-3">{(a as any).stores?.store_code}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{a.quantity}</td>
-                  <td className="px-5 py-3 font-mono text-xs">{a.expiry_date}</td>
-                  <td className="px-5 py-3 text-right tabular-nums font-semibold">{a.daysLeft}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">${Number((a as any).products?.current_price ?? 0).toFixed(2)}</td>
-                  <td className="px-5 py-3"><span className={`pill ${zoneClass[a.zone]}`}>{zoneEmoji[a.zone]} {a.zone}</span></td>
-                  <td className="px-5 py-3">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-7"
-                      disabled={proposeMutation.isPending}
-                      onClick={() => proposeMutation.mutate([a.id])}
-                    >
-                      {a.zone === "RED" ? "Urgent Clear" : "Propose MD"}
-                    </Button>
-                  </td>
-                  <td className="px-5 py-3">
-                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => navigate(`/batch/${a.id}`)}>View</Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        )}
-      </div>
+      <DataTable
+        rows={enriched}
+        columns={columns}
+        rowKey={(r) => r.id}
+        exportFilename="expiry-alerts"
+        tableId="expiry"
+        selectable
+        bulkActions={[
+          {
+            label: "Propose Markdown",
+            icon: <Tag className="h-3.5 w-3.5" />,
+            onRun: (rows) => proposeMutation.mutate(rows.map(r => r.id)),
+            disabled: () => proposeMutation.isPending,
+          },
+        ]}
+        emptyMessage="No near-expiry items — all stock in green zone"
+      />
     </>
   );
 };

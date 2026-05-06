@@ -145,17 +145,8 @@ const Receiving = () => {
       toast.success("Batch received and put away successfully");
       queryClient.invalidateQueries({ queryKey: ["receiving-po"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
-      // Reset
-      setStep(1);
-      setSelectedLineId(null);
-      setBatchNumber("");
-      setExpiryDate("");
-      setMfgDate("");
-      setReceivedQty("");
-      setPutawaySuggestion(null);
-      setLocationScan("");
-      setLabelPhoto(null);
-      setLabelPreview(null);
+      // Route to QC Inspection filtered by the batch just received
+      navigate(`/qc-inspection`);
     },
     onError: (e: any) => toast.error(e.message),
   });
@@ -188,7 +179,13 @@ const Receiving = () => {
               className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer ${
                 step === s.n ? "bg-primary/5 border border-primary/20" : "border border-transparent hover:bg-muted/50"
               }`}
-              onClick={() => setStep(s.n)}
+              onClick={() => {
+                if (s.n >= 2 && !poData && !poNumber.trim()) {
+                  toast.error("Load a PO first.");
+                  return;
+                }
+                setStep(s.n);
+              }}
             >
               <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                 step > s.n ? "bg-success text-success-foreground" : step === s.n ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"

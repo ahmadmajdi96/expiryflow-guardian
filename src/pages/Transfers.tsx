@@ -11,7 +11,7 @@ import { ArrowRight, Plus, Package } from "lucide-react";
 import { getFEFOTransferSuggestion, type TransferSuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import DataTableFilter, { matchesSearch } from "@/components/DataTableFilter";
+import { DataTable, DataTableColumn } from "@/components/DataTable";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" },
@@ -28,9 +28,6 @@ const Transfers = () => {
   const [toStoreId, setToStoreId] = useState("");
   const [qty, setQty] = useState("");
   const [suggestions, setSuggestions] = useState<TransferSuggestion[]>([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-
   const { data: transfers } = useQuery({
     queryKey: ["stock-transfers"],
     queryFn: async () => {
@@ -111,10 +108,20 @@ const Transfers = () => {
     onError: (e: any) => toast.error(e.message),
   });
 
-  const filteredTransfers = (transfers ?? []).filter((t: any) => {
-    if (statusFilter !== "ALL" && t.status !== statusFilter) return false;
-    return matchesSearch(t, search, ["transfer_code", "inventory_batches.batch_number", "inventory_batches.products.sku", "from_store.store_code", "to_store.store_code"]);
-  });
+  const transferColumns: DataTableColumn<any>[] = [
+    { key: "transfer_code", header: "Transfer ID", accessor: (r) => r.transfer_code, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs font-semibold">{r.transfer_code}</span> },
+    { key: "sku", header: "SKU / Batch", accessor: (r) => r.inventory_batches?.products?.sku ?? "", filter: "text", cell: (r) => (
+      <div><div className="font-mono text-xs">{r.inventory_batches?.products?.sku ?? "—"}</div><div className="text-xs text-muted-foreground">{r.inventory_batches?.batch_number}</div></div>
+    )},
+    { key: "route", header: "Route", accessor: (r) => `${r.from_store?.store_code} → ${r.to_store?.store_code}`, filter: "text", cell: (r) => (
+      <span><span className="font-semibold">{r.from_store?.store_code}</span><ArrowRight className="inline h-3 w-3 mx-1 text-muted-foreground" /><span className="font-semibold">{r.to_store?.store_code}</span></span>
+    )},
+    { key: "quantity", header: "Qty", accessor: (r) => r.quantity, sortable: true, align: "right", cell: (r) => <span className="tabular-nums">{r.quantity}</span> },
+    { key: "status", header: "Status", accessor: (r) => r.status, filter: "select", options: ["PENDING", "IN_TRANSIT", "COMPLETED"], cell: (r) => {
+      const sm: Record<string, { cls: string; label: string }> = { PENDING: { cls: "bg-warning/10 text-warning border-warning/30", label: "Pending" }, IN_TRANSIT: { cls: "bg-info/10 text-info border-info/30", label: "In Transit" }, COMPLETED: { cls: "bg-success/10 text-success border-success/30", label: "Completed" } };
+      return <Badge variant="outline" className={sm[r.status]?.cls || ""}>{sm[r.status]?.label || r.status}</Badge>;
+    }},
+  ];
 
   return (
     <>
@@ -186,65 +193,15 @@ const Transfers = () => {
         </div>
       )}
 
-      <div className="page-section">
-        <div className="px-5 py-4 border-b border-border">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="font-semibold">Transfer History</h2>
-            <div className="flex items-center gap-2">
-              <div className="w-56">
-                <DataTableFilter value={search} onChange={setSearch} placeholder="Search transfer, batch, store…" />
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-32 h-9 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Status</SelectItem>
-                  <SelectItem value="PENDING">Pending</SelectItem>
-                  <SelectItem value="IN_TRANSIT">In Transit</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left">
-                <th className="px-5 py-3 font-medium text-muted-foreground">Transfer ID</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">SKU / Batch</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Route</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground text-right">Qty</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Status</th>
-                <th className="px-5 py-3 font-medium text-muted-foreground">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTransfers.map((t: any) => (
-                <tr key={t.id} className="table-row-hover border-b border-border/50">
-                  <td className="px-5 py-3 font-mono text-xs font-semibold">{t.transfer_code}</td>
-                  <td className="px-5 py-3">
-                    <div className="font-mono text-xs">{t.inventory_batches?.products?.sku ?? "—"}</div>
-                    <div className="text-xs text-muted-foreground">{t.inventory_batches?.batch_number}</div>
-                  </td>
-                  <td className="px-5 py-3">
-                    <span className="font-semibold">{t.from_store?.store_code}</span>
-                    <ArrowRight className="inline h-3 w-3 mx-1 text-muted-foreground" />
-                    <span className="font-semibold">{t.to_store?.store_code}</span>
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums">{t.quantity}</td>
-                  <td className="px-5 py-3">
-                    <Badge variant="outline" className={statusMap[t.status]?.cls || ""}>{statusMap[t.status]?.label || t.status}</Badge>
-                  </td>
-                  <td className="px-5 py-3 font-mono text-xs">{t.created_at?.slice(0, 10)}</td>
-                </tr>
-              ))}
-              {filteredTransfers.length === 0 && (
-                <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">No transfers yet</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        rows={transfers ?? []}
+        columns={transferColumns}
+        rowKey={(r) => r.id}
+        exportFilename="transfers"
+        tableId="transfers"
+        createdAtKey="created_at"
+        emptyMessage="No transfers yet"
+      />
     </>
   );
 };
