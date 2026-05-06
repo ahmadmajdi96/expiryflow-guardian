@@ -179,35 +179,13 @@ const Receiving = () => {
               className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-all cursor-pointer ${
                 step === s.n ? "bg-primary/5 border border-primary/20" : "border border-transparent hover:bg-muted/50"
               }`}
-              onClick={() => setStep(s.n)}
-            onClick={() => {
-              if (s.n >= 2 && !poData && !poNumber.trim()) {
-                toast.error("Load a PO first.");
-                return;
-              }
-              setStep(s.n);
-            }}
-            onClick={() => {
-              if (s.n >= 2 && !poData && !poNumber.trim()) {
-                toast.error("Load a PO first.");
-                return;
-              }
-              setStep(s.n);
-            }}
-            onClick={() => {
-              if (s.n >= 2 && !poData && !poNumber.trim()) {
-                toast.error("Load a PO first.");
-                return;
-              }
-              setStep(s.n);
-            }}
-            onClick={() => {
-              if (s.n >= 2 && !poData && !poNumber.trim()) {
-                toast.error("Load a PO first.");
-                return;
-              }
-              setStep(s.n);
-            }}
+              onClick={() => {
+                if (s.n >= 2 && !poData && !poNumber.trim()) {
+                  toast.error("Load a PO first.");
+                  return;
+                }
+                setStep(s.n);
+              }}
             >
               <div className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                 step > s.n ? "bg-success text-success-foreground" : step === s.n ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
