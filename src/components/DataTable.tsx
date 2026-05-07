@@ -547,6 +547,7 @@ export function DataTable<T>({
                   </>
                 );
               })}
+              )}
               {paged.map(r => {
                 const k = rowKey(r);
                 const isSel = selected.has(k);
