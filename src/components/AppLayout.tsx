@@ -48,10 +48,10 @@ const sections: NavSection[] = [
 
 const AppLayout = ({ children }: { children: ReactNode }) => {
   const { user, loading, signOut } = useAuth();
-  const { canAccess, roles } = useRole();
+  const { canAccess, roles, loading: rolesLoading } = useRole();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
+  if (loading || rolesLoading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading…</div>;
   if (!user) return <Navigate to="/auth" state={{ from: location }} replace />;
 
   return (
