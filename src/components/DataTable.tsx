@@ -57,6 +57,7 @@ interface Props<T> {
   persistInUrl?: boolean;
   selectable?: boolean;
   bulkActions?: BulkAction<T>[];
+  expandedRowRender?: (row: T) => ReactNode | null;
 }
 
 type SortDir = "asc" | "desc" | null;
@@ -78,6 +79,7 @@ export function DataTable<T>({
   emptyMessage = "No records.", rowKey, onRowClick, rowClassName,
   pageSize: initialPageSize = 25, tableId, persistInUrl,
   selectable = false, bulkActions = [],
+  expandedRowRender,
 }: Props<T>) {
   const useUrl = persistInUrl ?? !!tableId;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -500,6 +502,17 @@ export function DataTable<T>({
                       </TableCell>
                     ))}
                   </TableRow>
+                  {expandedRowRender && (() => {
+                    const expanded = expandedRowRender(r);
+                    if (!expanded) return null;
+                    return (
+                      <TableRow key={`${k}-expanded`}>
+                        <TableCell colSpan={colCount} className="p-0">
+                          {expanded}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })()}
                 );
               })}
             </TableBody>
