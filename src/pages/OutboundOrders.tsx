@@ -559,9 +559,10 @@ const OutboundOrders = () => {
       .select("*, inventory_batches:batch_id(batch_number, expiry_date, location, quantity, qc_status, status)")
       .in("outbound_order_line_id", lineIds)
       .order("created_at");
+    const fetchedPicks = (dbPickLines ?? []) as any[];
     const pickLineData: PickListLine[] = [];
     for (const ol of order.outbound_order_lines ?? []) {
-      const olPicks = (dbPickLines ?? []).filter((pl: any) => pl.outbound_order_line_id === ol.id);
+      const olPicks = fetchedPicks.filter((pl: any) => pl.outbound_order_line_id === ol.id);
       if (olPicks.length > 0) {
         for (const pl of olPicks) {
           pickLineData.push({
