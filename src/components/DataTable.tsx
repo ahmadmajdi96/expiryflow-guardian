@@ -1,4 +1,4 @@
-import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,7 @@ interface Props<T> {
   persistInUrl?: boolean;
   selectable?: boolean;
   bulkActions?: BulkAction<T>[];
+  expandedRowRender?: (row: T) => ReactNode | null;
 }
 
 type SortDir = "asc" | "desc" | null;
@@ -78,6 +79,7 @@ export function DataTable<T>({
   emptyMessage = "No records.", rowKey, onRowClick, rowClassName,
   pageSize: initialPageSize = 25, tableId, persistInUrl,
   selectable = false, bulkActions = [],
+  expandedRowRender,
 }: Props<T>) {
   const useUrl = persistInUrl ?? !!tableId;
   const [searchParams, setSearchParams] = useSearchParams();
@@ -483,23 +485,35 @@ export function DataTable<T>({
                 const k = rowKey(r);
                 const isSel = selected.has(k);
                 return (
-                  <TableRow
-                    key={k}
-                    data-state={isSel ? "selected" : undefined}
-                    className={`table-row-hover ${onRowClick ? "cursor-pointer" : ""} ${rowClassName ? rowClassName(r) : ""}`}
-                    onClick={onRowClick ? () => onRowClick(r) : undefined}
-                  >
-                    {selectable && (
-                      <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
-                        <Checkbox checked={isSel} onCheckedChange={() => toggleRow(k)} aria-label="Select row" />
-                      </TableCell>
-                    )}
-                    {visibleColumns.map(c => (
-                      <TableCell key={c.key} className={`${alignClass(c.align)} ${c.className ?? ""}`}>
-                        {c.cell ? c.cell(r) : (c.accessor(r) ?? <span className="text-muted-foreground">—</span>)}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+                  <React.Fragment key={k}>
+                    <TableRow
+                      data-state={isSel ? "selected" : undefined}
+                      className={`table-row-hover ${onRowClick ? "cursor-pointer" : ""} ${rowClassName ? rowClassName(r) : ""}`}
+                      onClick={onRowClick ? () => onRowClick(r) : undefined}
+                    >
+                      {selectable && (
+                        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox checked={isSel} onCheckedChange={() => toggleRow(k)} aria-label="Select row" />
+                        </TableCell>
+                      )}
+                      {visibleColumns.map(c => (
+                        <TableCell key={c.key} className={`${alignClass(c.align)} ${c.className ?? ""}`}>
+                          {c.cell ? c.cell(r) : (c.accessor(r) ?? <span className="text-muted-foreground">—</span>)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                    {expandedRowRender && (() => {
+                      const expanded = expandedRowRender(r);
+                      if (!expanded) return null;
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={colCount} className="p-0">
+                            {expanded}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })()}
+                  </React.Fragment>
                 );
               })}
             </TableBody>

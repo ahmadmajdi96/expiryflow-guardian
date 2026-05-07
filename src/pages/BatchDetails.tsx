@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Camera, Package, Calendar, MapPin } from "lucide-react";
+import { ArrowLeft, Camera, Package, Calendar, MapPin, History, Shield, ArrowRightLeft } from "lucide-react";
 
 function getZone(daysLeft: number) {
   if (daysLeft <= 2) return "BLACK";
@@ -52,6 +52,32 @@ const BatchDetails = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("fefo_allocation_log")
+        .select("*")
+        .eq("batch_id", id!)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: transfers } = useQuery({
+    queryKey: ["batch-transfers", id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("stock_transfers")
+        .select("*, from_store:from_store_id(store_code, name), to_store:to_store_id(store_code, name)")
+        .eq("batch_id", id!)
+        .order("created_at", { ascending: false });
+      return data ?? [];
+    },
+    enabled: !!id,
+  });
+
+  const { data: markdownProposals } = useQuery({
+    queryKey: ["batch-markdowns", id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("markdown_proposals")
         .select("*")
         .eq("batch_id", id!)
         .order("created_at", { ascending: false });
@@ -124,6 +150,48 @@ const BatchDetails = () => {
                     <div className="flex items-center gap-3">
                       <span className="tabular-nums text-sm font-semibold">{log.quantity} units</span>
                       <span className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {transfers && transfers.length > 0 && (
+            <div className="page-section p-5">
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><ArrowRightLeft className="h-5 w-5 text-primary" /> Transfer History</h3>
+              <div className="space-y-2">
+                {transfers.map((t: any) => (
+                  <div key={t.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs font-semibold">{t.transfer_code}</span>
+                      <span className="text-xs text-muted-foreground">{t.from_store?.store_code} → {t.to_store?.store_code}</span>
+                      <Badge variant="outline" className={t.status === "COMPLETED" ? "bg-success/10 text-success" : "bg-warning/10 text-warning"}>{t.status}</Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="tabular-nums text-sm font-semibold">{t.quantity} units</span>
+                      <span className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {markdownProposals && markdownProposals.length > 0 && (
+            <div className="page-section p-5">
+              <h3 className="font-semibold mb-4 flex items-center gap-2"><History className="h-5 w-5 text-primary" /> Markdown Proposals</h3>
+              <div className="space-y-2">
+                {markdownProposals.map((mp: any) => (
+                  <div key={mp.id} className="flex items-center justify-between p-3 rounded-lg border border-border">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={mp.status === "approved" ? "bg-success/10 text-success" : mp.status === "rejected" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}>{mp.status}</Badge>
+                      <span className="text-sm">${Number(mp.current_price).toFixed(2)} → <span className="font-semibold">${Number(mp.proposed_price).toFixed(2)}</span></span>
+                      <Badge variant="outline" className="text-xs">{mp.urgency}</Badge>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">{Number(mp.discount_percent).toFixed(0)}% off</span>
+                      <span className="text-xs text-muted-foreground">{new Date(mp.created_at).toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
