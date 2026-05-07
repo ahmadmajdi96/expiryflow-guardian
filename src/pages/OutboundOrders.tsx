@@ -763,6 +763,20 @@ const OutboundOrders = () => {
                 <AlertDescription className="text-xs">{scanFeedback.msg}</AlertDescription>
               </Alert>
             )}
+            {scanAttemptCount > 0 && scanFeedback?.type === "error" && (
+              <div className="flex items-center flex-wrap gap-2 text-xs text-muted-foreground px-1">
+                <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+                  {scanAttemptCount} failed attempt{scanAttemptCount > 1 ? "s" : ""}
+                </Badge>
+                {lastScanTargetLineId && (() => {
+                  const targetPl = (outboundPickLines ?? []).find((pl: any) => pl.id === lastScanTargetLineId);
+                  return targetPl ? (
+                    <span>Last matched: <span className="font-mono font-semibold">{targetPl.inventory_batches?.batch_number}</span> — try a different batch or resolve the block</span>
+                  ) : null;
+                })()}
+                <span className="ml-auto">Scan input cleared — allocated line context preserved. Retry with correct barcode.</span>
+              </div>
+            )}
           </div>
         )}
         {/* Scanning Progress Indicator */}
