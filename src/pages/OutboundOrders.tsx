@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
@@ -8,15 +8,17 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, ChevronDown, ChevronRight, Package, Calendar, MapPin, CheckCircle, ScanBarcode, Printer, AlertTriangle, ShieldAlert, Lock } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, Package, Calendar, MapPin, CheckCircle, ScanBarcode, Printer, AlertTriangle, ShieldAlert, Lock, XCircle, FileText, Info } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DataTable, DataTableColumn } from "@/components/DataTable";
 import { getFEFOPickingSuggestion, type FEFOSuggestion } from "@/lib/fefo";
 import { exportPickList, type PickListLine } from "@/lib/exporters";
+import { generatePickSlipPdf } from "@/lib/pickSlipPdf";
 import { Link } from "react-router-dom";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   DRAFT: { cls: "bg-muted/50 text-muted-foreground border-border", label: "Draft" },
@@ -41,6 +43,91 @@ const OutboundOrders = () => {
   const [pickingInProgress, setPickingInProgress] = useState(false);
   const [scanInput, setScanInput] = useState("");
   const [scannedPickLineIds, setScannedPickLineIds] = useState<Set<string>>(new Set());
+  const [scanFeedback, setScanFeedback] = useState<{ type: "success" | "error" | "warning"; msg: string } | null>(null);
+  const pickingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const PICKING_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+  // ─── Barcode format parser ───
+  const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1"; value: string; batch?: string; sku?: string; expiry?: string } => {
+    const trimmed = raw.trim();
+    // GS1-128 / GS1 DataMatrix: (01)GTIN(10)BATCH(17)EXPIRY
+    const gs1Match = trimmed.match(/\(01\)(\d{14})\(10\)([^\(]+)(?:\(17\)(\d{6}))?/);
+    if (gs1Match) {
+      return { type: "gs1", value: trimmed, sku: gs1Match[1], batch: gs1Match[2], expiry: gs1Match[3] };
+    }
+    // AI prefix without parens: 01GTIN10BATCH17EXPIRY
+    const gs1Plain = trimmed.match(/^01(\d{14})10([A-Za-z0-9\-]+)(?:17(\d{6}))?$/);
+    if (gs1Plain) {
+      return { type: "gs1", value: trimmed, sku: gs1Plain[1], batch: gs1Plain[2], expiry: gs1Plain[3] };
+    }
+    // Batch label format: BATCH-XXXXX or starts with B/LOT prefix
+    if (/^(BATCH|LOT|BN)[\-:]?\s*/i.test(trimmed)) {
+      return { type: "batch", value: trimmed.replace(/^(BATCH|LOT|BN)[\-:]?\s*/i, "") };
+    }
+    // If it looks like a batch number (contains mix of letters, digits, dashes, length > 6)
+    if (/^[A-Z]{2,4}[\-]?\d{4,}/i.test(trimmed) && trimmed.length >= 8) {
+      return { type: "batch", value: trimmed };
+    }
+    // Default: treat as SKU
+    return { type: "sku", value: trimmed };
+  };
+
+  // ─── Reservation release ───
+  const releaseReservations = useCallback(async (orderId: string) => {
+    const order = (orders ?? []).find((o: any) => o.id === orderId);
+    if (!order) return;
+    const lineIds = (order.outbound_order_lines ?? []).map((l: any) => l.id);
+    if (lineIds.length === 0) return;
+    const { data: pls } = await supabase
+      .from("outbound_pick_lines")
+      .select("id, batch_id, allocated_quantity, status")
+      .in("outbound_order_line_id", lineIds);
+    for (const pl of pls ?? []) {
+      if (pl.status === "PICKED") continue; // already deducted
+      const { data: batch } = await supabase.from("inventory_batches")
+        .select("reserved_quantity").eq("id", pl.batch_id).single();
+      if (batch) {
+        await supabase.from("inventory_batches").update({
+          reserved_quantity: Math.max(0, (batch.reserved_quantity ?? 0) - pl.allocated_quantity),
+        }).eq("id", pl.batch_id);
+      }
+      await supabase.from("outbound_pick_lines").update({ status: "CANCELLED" } as any).eq("id", pl.id);
+    }
+  }, [orders]);
+
+  const cancelPicking = useCallback(async (orderId: string) => {
+    await releaseReservations(orderId);
+    await supabase.from("outbound_orders").update({ status: "CONFIRMED" } as any).eq("id", orderId);
+    setPickingOrderId(null);
+    setFefoAllocations({});
+    setScannedPickLineIds(new Set());
+    setScanFeedback(null);
+    queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
+    toast.info("Picking cancelled — all reservations released.");
+  }, [releaseReservations, queryClient]);
+
+  // Auto-release on timeout
+  useEffect(() => {
+    if (pickingTimerRef.current) clearTimeout(pickingTimerRef.current);
+    if (pickingOrderId) {
+      pickingTimerRef.current = setTimeout(() => {
+        toast.warning("Picking session timed out (30 min). Reservations released.");
+        cancelPicking(pickingOrderId);
+      }, PICKING_TIMEOUT_MS);
+    }
+    return () => { if (pickingTimerRef.current) clearTimeout(pickingTimerRef.current); };
+  }, [pickingOrderId, cancelPicking]);
+
+  // Release on unmount / navigation away
+  useEffect(() => {
+    return () => {
+      // We can't async in cleanup, but we fire-and-forget
+      if (pickingOrderId) {
+        releaseReservations(pickingOrderId);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: orders } = useQuery({
     queryKey: ["outbound-orders"],
@@ -182,43 +269,81 @@ const OutboundOrders = () => {
 
   const handleScanBarcode = async () => {
     if (!scanInput.trim() || !pickingOrderId) return;
-    const sku = scanInput.trim();
-    // Find matching pick line by batch_number or SKU
-    const matchingLines = (outboundPickLines ?? []).filter((pl: any) =>
-      pl.inventory_batches?.batch_number === sku && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
-    );
-    // Also try matching by product SKU if no batch match
-    let targetLine = matchingLines[0];
-    if (!targetLine) {
+    const parsed = parseBarcodeInput(scanInput);
+    let targetLine: any = null;
+
+    if (parsed.type === "gs1") {
+      // GS1: match by batch number first, then cross-check SKU
+      if (parsed.batch) {
+        targetLine = (outboundPickLines ?? []).find((pl: any) =>
+          pl.inventory_batches?.batch_number === parsed.batch && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
+        );
+      }
+      if (!targetLine && parsed.sku) {
+        const order = (orders ?? []).find((o: any) => o.id === pickingOrderId);
+        const orderLines = order?.outbound_order_lines ?? [];
+        // GTIN may be embedded in SKU or match directly
+        const matchingOrderLine = orderLines.find((ol: any) => ol.products?.sku === parsed.sku || parsed.sku?.endsWith(ol.products?.sku));
+        if (matchingOrderLine) {
+          targetLine = (outboundPickLines ?? []).find((pl: any) =>
+            pl.outbound_order_line_id === matchingOrderLine.id && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
+          );
+        }
+      }
+    } else if (parsed.type === "batch") {
+      targetLine = (outboundPickLines ?? []).find((pl: any) =>
+        pl.inventory_batches?.batch_number === parsed.value && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
+      );
+    } else {
+      // SKU match
       const order = (orders ?? []).find((o: any) => o.id === pickingOrderId);
       const orderLines = order?.outbound_order_lines ?? [];
-      const matchingOrderLine = orderLines.find((ol: any) => ol.products?.sku === sku);
+      const matchingOrderLine = orderLines.find((ol: any) => ol.products?.sku === parsed.value);
       if (matchingOrderLine) {
         targetLine = (outboundPickLines ?? []).find((pl: any) =>
           pl.outbound_order_line_id === matchingOrderLine.id && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
         );
       }
     }
+
+    // Fallback: try raw input against batch number directly
     if (!targetLine) {
-      toast.error(`No pending pick line found for "${sku}". Already scanned or not in this order.`);
+      targetLine = (outboundPickLines ?? []).find((pl: any) =>
+        pl.inventory_batches?.batch_number === scanInput.trim() && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
+      );
+    }
+
+    if (!targetLine) {
+      setScanFeedback({ type: "error", msg: `No pending pick line found for "${scanInput.trim()}". Already scanned or not in this order.` });
+      toast.error(`No pending pick line found for "${scanInput.trim()}".`);
       setScanInput("");
       return;
     }
-    // Validate batch is still eligible
+
     const batch = targetLine.inventory_batches;
     if (batch?.qc_status !== "PASSED") {
-      toast.error(`⛔ Batch ${batch?.batch_number} is blocked — QC status: ${batch?.qc_status}`);
+      // Fetch detailed QC info
+      const { data: qcRecords } = await supabase.from("qc_inspections")
+        .select("result, notes, inspected_at, inspector_id")
+        .eq("batch_id", targetLine.batch_id)
+        .order("created_at", { ascending: false })
+        .limit(3);
+      const reasons = (qcRecords ?? []).map(q => `${q.result}: ${q.notes || "No notes"}`).join(" | ");
+      setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} blocked — QC: ${batch?.qc_status}. ${reasons || "No inspection records."}` });
+      toast.error(`⛔ Batch ${batch?.batch_number} blocked — QC: ${batch?.qc_status}`);
       setScanInput("");
       return;
     }
     if (batch?.status === "QUARANTINED" || batch?.status === "DEPLETED") {
+      setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} is ${batch?.status} — cannot pick. Check Quarantine page for details.` });
       toast.error(`⛔ Batch ${batch?.batch_number} is ${batch?.status} — cannot pick.`);
       setScanInput("");
       return;
     }
-    // Check expiry
+
     const daysLeft = batch?.expiry_date ? Math.ceil((new Date(batch.expiry_date).getTime() - Date.now()) / 86400000) : null;
     if (daysLeft !== null && daysLeft <= 0) {
+      setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} is EXPIRED (${batch?.expiry_date}). Cannot pick.` });
       toast.error(`⛔ Batch ${batch?.batch_number} is EXPIRED. Raise an exception.`);
       setScanInput("");
       return;
@@ -228,7 +353,7 @@ const OutboundOrders = () => {
     } else if (daysLeft !== null && daysLeft <= 7) {
       toast.warning(`⚠️ Batch ${batch?.batch_number}: ${daysLeft} days left (RED zone).`, { duration: 4000 });
     }
-    // Mark as picked
+
     const pickQty = Math.min(targetLine.allocated_quantity, batch?.quantity ?? 0);
     await supabase.from("outbound_pick_lines").update({
       picked_quantity: pickQty,
@@ -239,12 +364,27 @@ const OutboundOrders = () => {
     setScanInput("");
     refetchPickLines();
     const partialNote = pickQty < targetLine.allocated_quantity ? ` (partial: ${pickQty}/${targetLine.allocated_quantity})` : "";
+    const formatNote = parsed.type === "gs1" ? " [GS1]" : parsed.type === "batch" ? " [Batch]" : " [SKU]";
+    setScanFeedback({ type: "success", msg: `${batch?.batch_number} — ${pickQty} units from ${targetLine.location_type}${partialNote}${formatNote}` });
     toast.success(`✓ Scanned ${batch?.batch_number} — ${pickQty} units from ${targetLine.location_type}${partialNote}`);
   };
 
   const confirmPicking = async (orderId: string) => {
     const order = (orders ?? []).find((o: any) => o.id === orderId);
     const pickedLines = (outboundPickLines ?? []).filter((pl: any) => pl.status === "PICKED" || pl.status === "PARTIAL");
+
+    // ─── Verification check: compare scanned vs allocated ───
+    const allAllocated = (outboundPickLines ?? []).filter((pl: any) => pl.status !== "CANCELLED");
+    const unscanned = allAllocated.filter((pl: any) => pl.status === "PENDING");
+    if (unscanned.length > 0 && pickedLines.length < allAllocated.length) {
+      const unscannedCount = unscanned.length;
+      const totalUnscannedQty = unscanned.reduce((s: number, pl: any) => s + pl.allocated_quantity, 0);
+      const proceed = window.confirm(
+        `${unscannedCount} allocated line(s) (${totalUnscannedQty} units) have NOT been scanned.\n\nConfirm partial pick? Unscanned reservations will be released.`
+      );
+      if (!proceed) return;
+    }
+
     if (pickedLines.length === 0) {
       toast.error("Scan at least one batch before confirming.");
       return;
@@ -291,13 +431,15 @@ const OutboundOrders = () => {
     setPickingOrderId(null);
     setFefoAllocations({});
     setScannedPickLineIds(new Set());
+    setScanFeedback(null);
+    if (pickingTimerRef.current) clearTimeout(pickingTimerRef.current);
     queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
     toast.success(`Picking confirmed — ${totalPicked} units deducted from inventory.`);
   };
 
-  const handlePrintPickList = (orderId: string) => {
+  const buildPickLineData = (orderId: string): { order: any; pickLineData: PickListLine[] } | null => {
     const order = (orders ?? []).find((o: any) => o.id === orderId);
-    if (!order) return;
+    if (!order) return null;
     const pickLineData: PickListLine[] = [];
     for (const ol of order.outbound_order_lines ?? []) {
       const olPicks = (outboundPickLines ?? []).filter((pl: any) => pl.outbound_order_line_id === ol.id);
@@ -331,8 +473,26 @@ const OutboundOrders = () => {
         });
       }
     }
-    exportPickList(order.order_number, order.customer_name || "", pickLineData);
-    toast.success("Pick list exported.");
+    return { order, pickLineData };
+  };
+
+  const handlePrintPickList = (orderId: string) => {
+    const result = buildPickLineData(orderId);
+    if (!result) return;
+    exportPickList(result.order.order_number, result.order.customer_name || "", result.pickLineData);
+    toast.success("Pick list exported (TXT).");
+  };
+
+  const handlePrintPdf = (orderId: string) => {
+    const result = buildPickLineData(orderId);
+    if (!result) return;
+    generatePickSlipPdf(
+      result.order.order_number,
+      result.order.customer_name || "",
+      result.order.ship_date || "",
+      result.pickLineData
+    );
+    toast.success("PDF pick slip generated.");
   };
 
   const columns: DataTableColumn<any>[] = [
@@ -356,13 +516,19 @@ const OutboundOrders = () => {
       if (r.status === "PICKING" && pickingOrderId === r.id) {
         return (
           <div className="flex gap-1">
-            <Button size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); confirmPicking(r.id); }}><CheckCircle className="h-3 w-3 mr-1" />Confirm</Button>
-            <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPickList(r.id); }}><Printer className="h-3 w-3" /></Button>
+            <Button size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); confirmPicking(r.id); }}><CheckCircle className="h-3 w-3 mr-1" />Confirm Pick</Button>
+            <Button variant="destructive" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); cancelPicking(r.id); }}><XCircle className="h-3 w-3 mr-1" />Cancel</Button>
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPdf(r.id); }}><FileText className="h-3 w-3" /></Button>
           </div>
         );
       }
       if (r.status === "SHIPPED" || r.status === "DELIVERED") {
-        return <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPickList(r.id); }}><Printer className="h-3 w-3 mr-1" />Pick List</Button>;
+        return (
+          <div className="flex gap-1">
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPdf(r.id); }}><FileText className="h-3 w-3 mr-1" />PDF</Button>
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPickList(r.id); }}><Printer className="h-3 w-3 mr-1" />TXT</Button>
+          </div>
+        );
       }
       if (!nextStatus) return null;
       return <Button variant="outline" size="sm" className="text-xs h-7" disabled={pickingInProgress} onClick={(e) => { e.stopPropagation(); advanceStatus(r.id, nextStatus); }}>{pickingInProgress && nextStatus === "PICKING" ? "Allocating…" : labels[nextStatus] || nextStatus}</Button>;
@@ -387,17 +553,38 @@ const OutboundOrders = () => {
         </div>
         {/* Barcode scanning when actively picking */}
         {isActivePick && (
-          <div className="flex gap-2 items-center p-3 rounded-lg border border-primary/30 bg-primary/5">
-            <ScanBarcode className="h-5 w-5 text-primary" />
-            <Input
-              placeholder="Scan batch number or SKU…"
-              className="font-mono flex-1"
-              value={scanInput}
-              onChange={(e) => setScanInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleScanBarcode()}
-              autoFocus
-            />
-            <Button onClick={handleScanBarcode} size="sm">Scan</Button>
+          <div className="space-y-2">
+            <div className="flex gap-2 items-center p-3 rounded-lg border border-primary/30 bg-primary/5">
+              <ScanBarcode className="h-5 w-5 text-primary" />
+              <Input
+                placeholder="Scan barcode (GS1/batch label/SKU)…"
+                className="font-mono flex-1"
+                value={scanInput}
+                onChange={(e) => setScanInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScanBarcode()}
+                autoFocus
+              />
+              <Button onClick={handleScanBarcode} size="sm">Scan</Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild><Info className="h-4 w-4 text-muted-foreground cursor-help" /></TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs text-xs">
+                    <p className="font-semibold mb-1">Supported barcode formats:</p>
+                    <ul className="list-disc pl-3 space-y-0.5">
+                      <li><strong>GS1-128/DataMatrix:</strong> (01)GTIN(10)BATCH(17)EXPIRY</li>
+                      <li><strong>Batch label:</strong> BATCH-XXXX or LOT:XXXX</li>
+                      <li><strong>Product SKU:</strong> Direct SKU scan</li>
+                    </ul>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            {scanFeedback && (
+              <Alert variant={scanFeedback.type === "error" ? "destructive" : "default"} className={scanFeedback.type === "success" ? "border-success/30 bg-success/5" : scanFeedback.type === "warning" ? "border-warning/30 bg-warning/5" : ""}>
+                {scanFeedback.type === "success" ? <CheckCircle className="h-4 w-4 text-success" /> : scanFeedback.type === "warning" ? <AlertTriangle className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
+                <AlertDescription className="text-xs">{scanFeedback.msg}</AlertDescription>
+              </Alert>
+            )}
           </div>
         )}
         {orderLines.length === 0 && <p className="text-sm text-muted-foreground">No line items.</p>}
@@ -447,7 +634,23 @@ const OutboundOrders = () => {
                         <span className="flex items-center gap-1 text-muted-foreground"><Calendar className="h-3 w-3" />{b?.expiry_date}</span>
                         {daysLeft !== null && <span className="tabular-nums">{daysLeft}d</span>}
                         {zone && <Badge variant="outline" className={`text-[10px] py-0 ${zoneClass[zone] || ""}`}>{zone}</Badge>}
-                        {isBlocked && <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[10px] py-0">QC BLOCKED</Badge>}
+                        {isBlocked && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[10px] py-0 cursor-help">
+                                  {b?.status === "QUARANTINED" ? "QUARANTINED" : `QC: ${b?.qc_status}`}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-xs text-xs">
+                                <p>This batch cannot be picked.</p>
+                                <p><strong>Status:</strong> {b?.status}</p>
+                                <p><strong>QC Status:</strong> {b?.qc_status}</p>
+                                <p className="text-muted-foreground mt-1">Scan this batch to see detailed QC failure reasons.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
                         <span className="flex items-center gap-1 text-muted-foreground"><MapPin className="h-3 w-3" />{pl.location_code || "—"}</span>
                         <span className="ml-auto font-semibold tabular-nums">{pl.picked_quantity}/{pl.allocated_quantity}</span>
                         <Badge variant="outline" className={`text-[10px] py-0 ${pl.status === "PICKED" ? "text-success" : pl.status === "PARTIAL" ? "text-warning" : ""}`}>{pl.status}</Badge>
@@ -470,11 +673,17 @@ const OutboundOrders = () => {
               <AlertDescription className="flex items-center justify-between text-sm">
                 <span>Progress: <strong>{totalPicked}/{totalAlloc}</strong> units picked across <strong>{pickLinesForOrder.length}</strong> batch allocations ({pendingCount} pending)</span>
                 <div className="flex gap-2">
-                  <Button size="sm" className="h-7 text-xs" disabled={totalPicked === 0} onClick={() => confirmPicking(order.id)}>
+                  <Button size="sm" className="h-7 text-xs" disabled={totalPicked === 0} onClick={() => confirmPicking(order.id)} title={pendingCount > 0 ? `${pendingCount} line(s) not yet scanned — will prompt verification` : "All lines scanned"}>
                     <CheckCircle className="h-3 w-3 mr-1" />{totalPicked < totalAlloc ? `Confirm Partial (${totalPicked}/${totalAlloc})` : "Confirm Pick"}
                   </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handlePrintPdf(order.id)}>
+                    <FileText className="h-3 w-3 mr-1" />PDF
+                  </Button>
                   <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handlePrintPickList(order.id)}>
-                    <Printer className="h-3 w-3 mr-1" />Print
+                    <Printer className="h-3 w-3 mr-1" />TXT
+                  </Button>
+                  <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={() => cancelPicking(order.id)}>
+                    <XCircle className="h-3 w-3 mr-1" />Cancel Pick
                   </Button>
                 </div>
               </AlertDescription>
