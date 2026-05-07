@@ -37,6 +37,8 @@ const Receiving = () => {
   const [shelfLifeWarning, setShelfLifeWarning] = useState<string | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
   const [offlineCount, setOfflineCount] = useState(0);
+  const [receivingScanFeedback, setReceivingScanFeedback] = useState<{ type: "success" | "error" | "warning"; msg: string } | null>(null);
+  const [receivingScanAttempts, setReceivingScanAttempts] = useState(0);
 
   // Track online/offline status
   useState(() => {
@@ -104,7 +106,11 @@ const Receiving = () => {
   // Parse QR/barcode and auto-populate batch fields
   const handleBarcodeAutoFill = (raw: string) => {
     const trimmed = raw.trim();
-    if (!trimmed) return;
+    if (!trimmed) {
+      setReceivingScanFeedback({ type: "error", msg: "Empty scan input. Point scanner at barcode and try again." });
+      setReceivingScanAttempts(prev => prev + 1);
+      return;
+    }
     // QR format: BATCH:xxx|EXP:xxx|LOC:xxx|QTY:xxx
     const qrMatch = trimmed.match(/^BATCH:([^|]+)\|EXP:([^|]+)\|LOC:([^|]+)\|QTY:(\d+)$/);
     if (qrMatch) {
@@ -113,7 +119,9 @@ const Receiving = () => {
       setExpiryDate(qrMatch[2]);
       setLocationScan(qrMatch[3].replace(/^[^/]+\//, "")); // strip location_type prefix
       setReceivedQty(qrMatch[4]);
-      toast.success(`QR parsed: Batch ${qrMatch[1]}, Exp ${qrMatch[2]}, Qty ${qrMatch[4]}`);
+      setReceivingScanFeedback({ type: "success", msg: `QR parsed: Batch ${qrMatch[1]}, Exp ${qrMatch[2]}, Qty ${qrMatch[4]}` });
+      setReceivingScanAttempts(0);
+      toast.success(`QR parsed: Batch ${qrMatch[1]}`);
       setBarcodeInput("");
       return;
     }
@@ -127,6 +135,8 @@ const Receiving = () => {
         const d = gs1Match[3].slice(4, 6);
         setExpiryDate(`20${y}-${m}-${d}`);
       }
+      setReceivingScanFeedback({ type: "success", msg: `GS1 parsed: Batch ${gs1Match[2]}${gs1Match[3] ? `, Exp 20${gs1Match[3].slice(0,2)}-${gs1Match[3].slice(2,4)}-${gs1Match[3].slice(4,6)}` : " (no expiry in barcode — enter manually)"}` });
+      setReceivingScanAttempts(0);
       toast.success(`GS1 parsed: Batch ${gs1Match[2]}`);
       setBarcodeInput("");
       return;
@@ -134,12 +144,16 @@ const Receiving = () => {
     // Batch prefix
     if (/^(BATCH|LOT|BN)[\-:]?\s*/i.test(trimmed)) {
       setBatchNumber(trimmed.replace(/^(BATCH|LOT|BN)[\-:]?\s*/i, ""));
+      setReceivingScanFeedback({ type: "warning", msg: "Only batch number parsed from label. Expiry, quantity, and location must be entered manually." });
+      setReceivingScanAttempts(0);
       toast.info("Batch number auto-filled from label scan.");
       setBarcodeInput("");
       return;
     }
     // Fallback: treat as batch number
     setBatchNumber(trimmed);
+    setReceivingScanFeedback({ type: "warning", msg: `Unrecognized format — treated as batch number "${trimmed}". Other fields unchanged — fill manually or re-scan with a QR/GS1 label.` });
+    setReceivingScanAttempts(prev => prev + 1);
     setBarcodeInput("");
   };
 
@@ -431,6 +445,20 @@ const Receiving = () => {
                 />
                 <Button variant="outline" size="sm" onClick={() => handleBarcodeAutoFill(barcodeInput)}>Parse</Button>
               </div>
+              {receivingScanFeedback && (
+                <Alert variant={receivingScanFeedback.type === "error" ? "destructive" : "default"} className={`py-2 ${receivingScanFeedback.type === "success" ? "border-success/30 bg-success/5" : receivingScanFeedback.type === "warning" ? "border-warning/30 bg-warning/5" : ""}`}>
+                  {receivingScanFeedback.type === "success" ? <Check className="h-4 w-4 text-success" /> : <AlertTriangleIcon className="h-4 w-4" />}
+                  <AlertDescription className="text-xs">{receivingScanFeedback.msg}</AlertDescription>
+                </Alert>
+              )}
+              {receivingScanAttempts > 1 && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                  <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30">
+                    {receivingScanAttempts} scan attempt{receivingScanAttempts > 1 ? "s" : ""}
+                  </Badge>
+                  <span>Previously filled fields preserved. Only scan input cleared — retry or enter manually.</span>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Batch Number</Label>

@@ -47,8 +47,24 @@ const OutboundOrders = () => {
   const [scanFeedback, setScanFeedback] = useState<{ type: "success" | "error" | "warning"; msg: string } | null>(null);
   const pickingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PICKING_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const [lastScanTargetLineId, setLastScanTargetLineId] = useState<string | null>(null);
+  const [scanAttemptCount, setScanAttemptCount] = useState(0);
 
   const [qcDetails, setQcDetails] = useState<Record<string, any[]>>({});
+
+  // Log scan attempt to audit trail (non-blocking)
+  const logScanAttempt = useCallback(async (orderId: string, outcome: string, details: string, batchId?: string) => {
+    try {
+      await supabase.from("reservation_audit_log").insert({
+        event_type: "LOCK",
+        order_id: orderId,
+        batch_id: batchId || "00000000-0000-0000-0000-000000000000",
+        quantity: 0,
+        user_id: user?.id ?? null,
+        notes: `SCAN_${outcome}: ${details}`,
+      } as any);
+    } catch { /* non-blocking */ }
+  }, [user]);
 
   // ─── Barcode format parser ───
   const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1" | "qr"; value: string; batch?: string; sku?: string; expiry?: string; location?: string; qty?: number } => {
@@ -122,6 +138,8 @@ const OutboundOrders = () => {
     setFefoAllocations({});
     setScannedPickLineIds(new Set());
     setScanFeedback(null);
+    setLastScanTargetLineId(null);
+    setScanAttemptCount(0);
     queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
     toast.info("Picking cancelled — all reservations released.");
   }, [releaseReservations, queryClient]);
@@ -403,6 +421,8 @@ const OutboundOrders = () => {
       setScanFeedback({ type: "error", msg: `No pending pick line found for "${scanInput.trim()}". Already scanned or not in this order.` });
       toast.error(`No pending pick line found for "${scanInput.trim()}".`);
       setScanInput("");
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_NO_MATCH", `Input: "${scanInput.trim()}"`);
       return;
     }
 
@@ -418,12 +438,18 @@ const OutboundOrders = () => {
       setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} blocked — QC: ${batch?.qc_status}. ${reasons || "No inspection records."}` });
       toast.error(`⛔ Batch ${batch?.batch_number} blocked — QC: ${batch?.qc_status}`);
       setScanInput("");
+      setLastScanTargetLineId(targetLine.id);
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_QC_BLOCKED", `Batch ${batch?.batch_number} QC: ${batch?.qc_status}`, targetLine.batch_id);
       return;
     }
     if (batch?.status === "QUARANTINED" || batch?.status === "DEPLETED") {
       setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} is ${batch?.status} — cannot pick. Check Quarantine page for details.` });
       toast.error(`⛔ Batch ${batch?.batch_number} is ${batch?.status} — cannot pick.`);
       setScanInput("");
+      setLastScanTargetLineId(targetLine.id);
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_STATUS", `Batch ${batch?.batch_number} status: ${batch?.status}`, targetLine.batch_id);
       return;
     }
 
@@ -432,6 +458,9 @@ const OutboundOrders = () => {
       setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} is EXPIRED (${batch?.expiry_date}). Cannot pick.` });
       toast.error(`⛔ Batch ${batch?.batch_number} is EXPIRED. Raise an exception.`);
       setScanInput("");
+      setLastScanTargetLineId(targetLine.id);
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_EXPIRED", `Batch ${batch?.batch_number} expired ${batch?.expiry_date}`, targetLine.batch_id);
       return;
     }
     if (daysLeft !== null && daysLeft <= 2) {
@@ -448,11 +477,14 @@ const OutboundOrders = () => {
     } as any).eq("id", targetLine.id);
     setScannedPickLineIds(prev => new Set(prev).add(targetLine.id));
     setScanInput("");
+    setLastScanTargetLineId(null);
+    setScanAttemptCount(0);
     refetchPickLines();
     const partialNote = pickQty < targetLine.allocated_quantity ? ` (partial: ${pickQty}/${targetLine.allocated_quantity})` : "";
-    const formatNote = parsed.type === "gs1" ? " [GS1]" : parsed.type === "batch" ? " [Batch]" : " [SKU]";
+    const formatNote = parsed.type === "qr" ? " [QR]" : parsed.type === "gs1" ? " [GS1]" : parsed.type === "batch" ? " [Batch]" : " [SKU]";
     setScanFeedback({ type: "success", msg: `${batch?.batch_number} — ${pickQty} units from ${targetLine.location_type}${partialNote}${formatNote}` });
     toast.success(`✓ Scanned ${batch?.batch_number} — ${pickQty} units from ${targetLine.location_type}${partialNote}`);
+    logScanAttempt(pickingOrderId, "SUCCESS", `Batch ${batch?.batch_number} picked ${pickQty}/${targetLine.allocated_quantity}${formatNote}`, targetLine.batch_id);
   };
 
   const confirmPicking = async (orderId: string) => {
@@ -730,6 +762,20 @@ const OutboundOrders = () => {
                 {scanFeedback.type === "success" ? <CheckCircle className="h-4 w-4 text-success" /> : scanFeedback.type === "warning" ? <AlertTriangle className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />}
                 <AlertDescription className="text-xs">{scanFeedback.msg}</AlertDescription>
               </Alert>
+            )}
+            {scanAttemptCount > 0 && scanFeedback?.type === "error" && (
+              <div className="flex items-center flex-wrap gap-2 text-xs text-muted-foreground px-1">
+                <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+                  {scanAttemptCount} failed attempt{scanAttemptCount > 1 ? "s" : ""}
+                </Badge>
+                {lastScanTargetLineId && (() => {
+                  const targetPl = (outboundPickLines ?? []).find((pl: any) => pl.id === lastScanTargetLineId);
+                  return targetPl ? (
+                    <span>Last matched: <span className="font-mono font-semibold">{targetPl.inventory_batches?.batch_number}</span> — try a different batch or resolve the block</span>
+                  ) : null;
+                })()}
+                <span className="ml-auto">Scan input cleared — allocated line context preserved. Retry with correct barcode.</span>
+              </div>
             )}
           </div>
         )}
