@@ -74,9 +74,12 @@ const OutboundOrders = () => {
 
   // ─── Reservation release ───
   const releaseReservations = useCallback(async (orderId: string) => {
-    const order = (orders ?? []).find((o: any) => o.id === orderId);
-    if (!order) return;
-    const lineIds = (order.outbound_order_lines ?? []).map((l: any) => l.id);
+    // Query order lines directly to avoid dependency on orders state
+    const { data: orderLines } = await supabase
+      .from("outbound_order_lines")
+      .select("id")
+      .eq("outbound_order_id", orderId);
+    const lineIds = (orderLines ?? []).map((l: any) => l.id);
     if (lineIds.length === 0) return;
     const { data: pls } = await supabase
       .from("outbound_pick_lines")
@@ -93,7 +96,7 @@ const OutboundOrders = () => {
       }
       await supabase.from("outbound_pick_lines").update({ status: "CANCELLED" } as any).eq("id", pl.id);
     }
-  }, [orders]);
+  }, []);
 
   const cancelPicking = useCallback(async (orderId: string) => {
     await releaseReservations(orderId);
