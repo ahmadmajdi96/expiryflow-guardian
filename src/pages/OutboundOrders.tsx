@@ -8,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, Package, Calendar, MapPin, CheckCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { DataTable, DataTableColumn } from "@/components/DataTable";
+import { getFEFOPickingSuggestion, type FEFOSuggestion } from "@/lib/fefo";
+import { Link } from "react-router-dom";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
   DRAFT: { cls: "bg-muted/50 text-muted-foreground border-border", label: "Draft" },
@@ -31,13 +33,17 @@ const OutboundOrders = () => {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ order_number: "", customer_name: "", order_type: "SALE", ship_date: "", destination_store_id: "", notes: "" });
   const [lines, setLines] = useState<{ product_id: string; quantity_ordered: number }[]>([]);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [pickingOrderId, setPickingOrderId] = useState<string | null>(null);
+  const [fefoAllocations, setFefoAllocations] = useState<Record<string, FEFOSuggestion[]>>({});
+  const [pickingInProgress, setPickingInProgress] = useState(false);
 
   const { data: orders } = useQuery({
     queryKey: ["outbound-orders"],
     queryFn: async () => {
       const { data } = await supabase
         .from("outbound_orders")
-        .select("*, outbound_order_lines!outbound_order_lines_outbound_order_id_fkey(*, products!outbound_order_lines_product_id_fkey(sku, name)), stores:destination_store_id(store_code)")
+        .select("*, outbound_order_lines!outbound_order_lines_outbound_order_id_fkey(*, products!outbound_order_lines_product_id_fkey(sku, name), inventory_batches:batch_id(batch_number, expiry_date, location, quantity)), stores:destination_store_id(store_code)")
         .order("created_at", { ascending: false });
       return (data ?? []) as any[];
     },
@@ -91,12 +97,77 @@ const OutboundOrders = () => {
   });
 
   const advanceStatus = async (id: string, newStatus: string) => {
-    await supabase.from("outbound_orders").update({ status: newStatus } as any).eq("id", id);
+    if (newStatus === "PICKING") {
+      // Trigger FEFO allocation for all lines
+      setPickingOrderId(id);
+      setPickingInProgress(true);
+      const order = (orders ?? []).find((o: any) => o.id === id);
+      if (!order) return;
+      const allocs: Record<string, FEFOSuggestion[]> = {};
+      for (const line of order.outbound_order_lines ?? []) {
+        const storeId = order.destination_store_id;
+        if (storeId && line.product_id) {
+          const suggestions = await getFEFOPickingSuggestion(line.product_id, storeId, line.quantity_ordered);
+          allocs[line.id] = suggestions;
+          // Assign first batch to line
+          if (suggestions.length > 0) {
+            await supabase.from("outbound_order_lines").update({
+              batch_id: suggestions[0].batchId,
+              quantity_picked: suggestions.reduce((s, sg) => s + sg.quantity, 0),
+            } as any).eq("id", line.id);
+          }
+        }
+      }
+      setFefoAllocations(allocs);
+      await supabase.from("outbound_orders").update({ status: "PICKING" } as any).eq("id", id);
+      queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
+      setPickingInProgress(false);
+      setExpandedOrderId(id);
+      toast.success("FEFO allocation complete — batches assigned to each line.");
+    } else {
+      await supabase.from("outbound_orders").update({ status: newStatus } as any).eq("id", id);
+      queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
+      toast.success(`Order status updated to ${newStatus}`);
+    }
+  };
+
+  const confirmPicking = async (orderId: string) => {
+    await supabase.from("outbound_orders").update({ status: "SHIPPED" } as any).eq("id", orderId);
+    // Deduct inventory for each allocated batch
+    const order = (orders ?? []).find((o: any) => o.id === orderId);
+    for (const line of order?.outbound_order_lines ?? []) {
+      const lineAllocs = fefoAllocations[line.id] ?? [];
+      for (const alloc of lineAllocs) {
+        const { data: batch } = await supabase.from("inventory_batches").select("quantity").eq("id", alloc.batchId).single();
+        if (batch) {
+          const remaining = Math.max(0, batch.quantity - alloc.quantity);
+          await supabase.from("inventory_batches").update({
+            quantity: remaining,
+            status: remaining <= 0 ? "DEPLETED" : "AVAILABLE",
+          }).eq("id", alloc.batchId);
+        }
+        await supabase.from("fefo_allocation_log").insert({
+          batch_id: alloc.batchId,
+          allocation_type: "OUTBOUND_PICK",
+          location_type: alloc.locationType,
+          location_code: alloc.location || "UNKNOWN",
+          quantity: alloc.quantity,
+          allocated_by: user?.id,
+        });
+      }
+    }
+    setPickingOrderId(null);
+    setFefoAllocations({});
     queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
-    toast.success(`Order status updated to ${newStatus}`);
+    toast.success("Picking confirmed and inventory deducted.");
   };
 
   const columns: DataTableColumn<any>[] = [
+    { key: "expand", header: "", accessor: () => "", exportable: false, cell: (r) => (
+      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={(e) => { e.stopPropagation(); setExpandedOrderId(expandedOrderId === r.id ? null : r.id); }}>
+        {expandedOrderId === r.id ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </Button>
+    )},
     { key: "order_number", header: "Order #", accessor: (r) => r.order_number, sortable: true, filter: "text", cell: (r) => <span className="font-mono text-xs font-semibold">{r.order_number}</span> },
     { key: "order_type", header: "Type", accessor: (r) => r.order_type, filter: "select", options: ["SALE", "TRANSFER_OUT", "RETURN_TO_SUPPLIER"], cell: (r) => <Badge variant="outline">{typeMap[r.order_type] || r.order_type}</Badge> },
     { key: "customer_name", header: "Customer", accessor: (r) => r.customer_name || "", sortable: true, filter: "text" },
@@ -109,10 +180,75 @@ const OutboundOrders = () => {
       const next: Record<string, string> = { DRAFT: "CONFIRMED", CONFIRMED: "PICKING", PICKING: "SHIPPED", SHIPPED: "DELIVERED" };
       const nextStatus = next[r.status];
       if (!nextStatus) return null;
-      const labels: Record<string, string> = { CONFIRMED: "Confirm", PICKING: "Start Picking", SHIPPED: "Ship", DELIVERED: "Deliver" };
-      return <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); advanceStatus(r.id, nextStatus); }}>{labels[nextStatus] || nextStatus}</Button>;
+      const labels: Record<string, string> = { CONFIRMED: "Confirm", PICKING: "FEFO Pick", SHIPPED: "Ship", DELIVERED: "Deliver" };
+      if (r.status === "PICKING" && pickingOrderId === r.id) {
+        return <Button size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); confirmPicking(r.id); }}><CheckCircle className="h-3 w-3 mr-1" />Confirm Pick</Button>;
+      }
+      return <Button variant="outline" size="sm" className="text-xs h-7" disabled={pickingInProgress} onClick={(e) => { e.stopPropagation(); advanceStatus(r.id, nextStatus); }}>{pickingInProgress && nextStatus === "PICKING" ? "Allocating…" : labels[nextStatus] || nextStatus}</Button>;
     }},
   ];
+
+  const renderExpandedRow = (order: any) => {
+    if (expandedOrderId !== order.id) return null;
+    const orderLines = order.outbound_order_lines ?? [];
+    const lineAllocs = fefoAllocations;
+    return (
+      <div className="p-4 bg-muted/20 border-t border-border space-y-3">
+        <h4 className="text-sm font-semibold flex items-center gap-2"><Package className="h-4 w-4 text-primary" /> Line Items — FEFO Allocation Detail</h4>
+        {orderLines.length === 0 && <p className="text-sm text-muted-foreground">No line items.</p>}
+        {orderLines.map((line: any) => {
+          const allocs = lineAllocs[line.id] ?? [];
+          const batch = line.inventory_batches;
+          const daysLeft = batch?.expiry_date ? Math.ceil((new Date(batch.expiry_date).getTime() - Date.now()) / 86400000) : null;
+          const zone = daysLeft !== null ? (daysLeft <= 2 ? "BLACK" : daysLeft <= 7 ? "RED" : daysLeft <= 14 ? "ORANGE" : daysLeft <= 30 ? "YELLOW" : "GREEN") : null;
+          const zoneClass: Record<string, string> = { GREEN: "bg-success/10 text-success", YELLOW: "bg-warning/10 text-warning", ORANGE: "bg-orange-100 text-orange-700", RED: "bg-destructive/10 text-destructive", BLACK: "bg-foreground/10 text-foreground" };
+          return (
+            <div key={line.id} className="rounded-lg border border-border p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-sm">{line.products?.name}</span>
+                  <span className="font-mono text-xs text-muted-foreground">{line.products?.sku}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Ordered:</span>
+                  <span className="tabular-nums font-semibold text-sm">{line.quantity_ordered}</span>
+                  <span className="text-xs text-muted-foreground">Picked:</span>
+                  <span className="tabular-nums font-semibold text-sm">{line.quantity_picked}</span>
+                </div>
+              </div>
+              {/* Show assigned batch */}
+              {batch && (
+                <div className="flex items-center gap-3 p-2 rounded bg-muted/40 text-sm">
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                  <Link to={`/batch/${line.batch_id}`} className="font-mono text-xs font-semibold text-primary hover:underline">{batch.batch_number}</Link>
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground"><Calendar className="h-3 w-3" />{batch.expiry_date}</span>
+                  {daysLeft !== null && <span className="text-xs tabular-nums">{daysLeft}d left</span>}
+                  {zone && <Badge variant="outline" className={`text-xs ${zoneClass[zone] || ""}`}>{zone}</Badge>}
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{batch.location || "—"}</span>
+                </div>
+              )}
+              {/* Show FEFO allocation breakdown if we just did picking */}
+              {allocs.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold">FEFO Allocation (earliest expiry first):</p>
+                  {allocs.map((a, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-background border border-border">
+                      <Badge variant="outline" className={a.locationType === "PICKFACE" ? "bg-success/10 text-success border-success/30" : "bg-primary/10 text-primary border-primary/30"}>{a.locationType}</Badge>
+                      <Link to={`/batch/${a.batchId}`} className="font-mono font-semibold text-primary hover:underline">{a.batchNumber}</Link>
+                      <span className="text-muted-foreground">Exp: {a.expiryDate}</span>
+                      <span className="text-muted-foreground">@ {a.location || "—"}</span>
+                      <span className="ml-auto font-semibold tabular-nums">{a.quantity} units</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!batch && allocs.length === 0 && <p className="text-xs text-muted-foreground italic">No batch allocated yet. Start picking to assign FEFO batches.</p>}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -121,7 +257,7 @@ const OutboundOrders = () => {
         description="Manage sales orders, transfer-out, and return-to-supplier orders."
         actions={<Button size="sm" onClick={() => setShowNew(true)}><Plus className="h-4 w-4 mr-1" /> New Outbound Order</Button>}
       />
-      <DataTable rows={orders ?? []} columns={columns} rowKey={(r) => r.id} exportFilename="outbound-orders" tableId="outbound" createdAtKey="created_at" emptyMessage="No outbound orders yet." />
+      <DataTable rows={orders ?? []} columns={columns} rowKey={(r) => r.id} exportFilename="outbound-orders" tableId="outbound" createdAtKey="created_at" emptyMessage="No outbound orders yet." expandedRowRender={renderExpandedRow} />
 
       <Dialog open={showNew} onOpenChange={setShowNew}>
         <DialogContent className="max-w-lg">
