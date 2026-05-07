@@ -5,6 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, DataTableColumn } from "@/components/DataTable";
+import { useAuth } from "@/hooks/useAuth";
 
 const zoneClass: Record<string, string> = {
   GREEN: "zone-green", YELLOW: "zone-yellow", ORANGE: "zone-orange", RED: "zone-red", BLACK: "zone-black"
@@ -25,8 +26,9 @@ type EnrichedBatch = any & { daysLeft: number; zone: string };
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: batches } = useQuery({
-    queryKey: ["dashboard-batches"],
+    queryKey: ["dashboard-batches", user?.id],
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_batches")
@@ -35,11 +37,12 @@ const Dashboard = () => {
         .order("expiry_date", { ascending: true });
       return data ?? [];
     },
+    enabled: !!user,
     refetchInterval: 300000, // 5 min auto-refresh
   });
 
   const { data: quarantinedCount } = useQuery({
-    queryKey: ["dashboard-quarantined"],
+    queryKey: ["dashboard-quarantined", user?.id],
     queryFn: async () => {
       const { count } = await supabase
         .from("inventory_batches")
@@ -47,10 +50,11 @@ const Dashboard = () => {
         .eq("status", "QUARANTINED");
       return count ?? 0;
     },
+    enabled: !!user,
   });
 
   const { data: proposalCount } = useQuery({
-    queryKey: ["dashboard-proposals"],
+    queryKey: ["dashboard-proposals", user?.id],
     queryFn: async () => {
       const { count } = await supabase
         .from("markdown_proposals")
@@ -58,6 +62,7 @@ const Dashboard = () => {
         .in("status", ["pending", "approved"]);
       return count ?? 0;
     },
+    enabled: !!user,
   });
 
   const today = new Date();

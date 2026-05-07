@@ -12,12 +12,14 @@ const ROLE_PERMISSIONS: Record<AppRole, string[]> = {
 };
 
 export const useRole = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [roles, setRoles] = useState<AppRole[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return; // wait for auth to settle
     if (!user) { setRoles([]); setLoading(false); return; }
+    setLoading(true);
     const fetch = async () => {
       const { data } = await supabase
         .from("user_roles")
@@ -27,12 +29,13 @@ export const useRole = () => {
       setLoading(false);
     };
     fetch();
-  }, [user]);
+  }, [user, authLoading]);
 
   const hasRole = (role: AppRole) => roles.includes(role);
   const isAdmin = roles.includes("admin");
 
   const canAccess = (path: string) => {
+    if (loading) return true; // still loading, allow render
     if (roles.length === 0) return true; // no roles assigned = full access (bootstrapping)
     if (isAdmin) return true;
     return roles.some((r) => {
