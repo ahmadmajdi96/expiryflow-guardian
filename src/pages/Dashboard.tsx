@@ -1,11 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, Link } from "react-router-dom";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
-import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle } from "lucide-react";
+import { Package, AlertTriangle, Clock, ShieldAlert, TrendingDown, CheckCircle, Zap, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { DataTable, DataTableColumn } from "@/components/DataTable";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 const zoneClass: Record<string, string> = {
   GREEN: "zone-green", YELLOW: "zone-yellow", ORANGE: "zone-orange", RED: "zone-red", BLACK: "zone-black"
@@ -26,7 +29,26 @@ type EnrichedBatch = any & { daysLeft: number; zone: string };
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
+  const [runningJob, setRunningJob] = useState(false);
+
+  const runAlertJob = async () => {
+    setRunningJob(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("expiry-alert-job", { body: {} });
+      if (error) throw error;
+      const created = data?.created ?? 0;
+      toast.success(`Alert job complete: ${created} new markdown proposal${created !== 1 ? "s" : ""} created`);
+      queryClient.invalidateQueries({ queryKey: ["dashboard-batches"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-proposals"] });
+      queryClient.invalidateQueries({ queryKey: ["markdown-proposals"] });
+    } catch (e: any) {
+      toast.error(e.message || "Failed to run alert job");
+    } finally {
+      setRunningJob(false);
+    }
+  };
   const { data: batches } = useQuery({
     queryKey: ["dashboard-batches", user?.id],
     queryFn: async () => {
@@ -101,6 +123,12 @@ const Dashboard = () => {
         title="Dashboard"
         description="Real-time overview of inventory batches, expiry zones, and FEFO compliance across all stores."
         badge={<Badge variant="outline" className="text-xs font-mono">Live</Badge>}
+        actions={
+          <Button size="sm" onClick={runAlertJob} disabled={runningJob} className="gap-1.5">
+            {runningJob ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+            {runningJob ? "Scanning…" : "Run AI Alert Job"}
+          </Button>
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
