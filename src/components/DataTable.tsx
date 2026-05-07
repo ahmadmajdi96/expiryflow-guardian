@@ -547,6 +547,41 @@ export function DataTable<T>({
                   </>
                 );
               })}
+              {paged.map(r => {
+                const k = rowKey(r);
+                const isSel = selected.has(k);
+                return (
+                  <React.Fragment key={k}>
+                    <TableRow
+                      data-state={isSel ? "selected" : undefined}
+                      className={`table-row-hover ${onRowClick ? "cursor-pointer" : ""} ${rowClassName ? rowClassName(r) : ""}`}
+                      onClick={onRowClick ? () => onRowClick(r) : undefined}
+                    >
+                      {selectable && (
+                        <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox checked={isSel} onCheckedChange={() => toggleRow(k)} aria-label="Select row" />
+                        </TableCell>
+                      )}
+                      {visibleColumns.map(c => (
+                        <TableCell key={c.key} className={`${alignClass(c.align)} ${c.className ?? ""}`}>
+                          {c.cell ? c.cell(r) : (c.accessor(r) ?? <span className="text-muted-foreground">—</span>)}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                    {expandedRowRender && (() => {
+                      const expanded = expandedRowRender(r);
+                      if (!expanded) return null;
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={colCount} className="p-0">
+                            {expanded}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })()}
+                  </React.Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
