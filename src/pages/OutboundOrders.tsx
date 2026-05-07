@@ -421,6 +421,8 @@ const OutboundOrders = () => {
       setScanFeedback({ type: "error", msg: `No pending pick line found for "${scanInput.trim()}". Already scanned or not in this order.` });
       toast.error(`No pending pick line found for "${scanInput.trim()}".`);
       setScanInput("");
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_NO_MATCH", `Input: "${scanInput.trim()}"`);
       return;
     }
 
@@ -436,12 +438,18 @@ const OutboundOrders = () => {
       setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} blocked — QC: ${batch?.qc_status}. ${reasons || "No inspection records."}` });
       toast.error(`⛔ Batch ${batch?.batch_number} blocked — QC: ${batch?.qc_status}`);
       setScanInput("");
+      setLastScanTargetLineId(targetLine.id);
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_QC_BLOCKED", `Batch ${batch?.batch_number} QC: ${batch?.qc_status}`, targetLine.batch_id);
       return;
     }
     if (batch?.status === "QUARANTINED" || batch?.status === "DEPLETED") {
       setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} is ${batch?.status} — cannot pick. Check Quarantine page for details.` });
       toast.error(`⛔ Batch ${batch?.batch_number} is ${batch?.status} — cannot pick.`);
       setScanInput("");
+      setLastScanTargetLineId(targetLine.id);
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_STATUS", `Batch ${batch?.batch_number} status: ${batch?.status}`, targetLine.batch_id);
       return;
     }
 
@@ -450,6 +458,9 @@ const OutboundOrders = () => {
       setScanFeedback({ type: "error", msg: `Batch ${batch?.batch_number} is EXPIRED (${batch?.expiry_date}). Cannot pick.` });
       toast.error(`⛔ Batch ${batch?.batch_number} is EXPIRED. Raise an exception.`);
       setScanInput("");
+      setLastScanTargetLineId(targetLine.id);
+      setScanAttemptCount(prev => prev + 1);
+      logScanAttempt(pickingOrderId, "FAIL_EXPIRED", `Batch ${batch?.batch_number} expired ${batch?.expiry_date}`, targetLine.batch_id);
       return;
     }
     if (daysLeft !== null && daysLeft <= 2) {
@@ -466,11 +477,14 @@ const OutboundOrders = () => {
     } as any).eq("id", targetLine.id);
     setScannedPickLineIds(prev => new Set(prev).add(targetLine.id));
     setScanInput("");
+    setLastScanTargetLineId(null);
+    setScanAttemptCount(0);
     refetchPickLines();
     const partialNote = pickQty < targetLine.allocated_quantity ? ` (partial: ${pickQty}/${targetLine.allocated_quantity})` : "";
-    const formatNote = parsed.type === "gs1" ? " [GS1]" : parsed.type === "batch" ? " [Batch]" : " [SKU]";
+    const formatNote = parsed.type === "qr" ? " [QR]" : parsed.type === "gs1" ? " [GS1]" : parsed.type === "batch" ? " [Batch]" : " [SKU]";
     setScanFeedback({ type: "success", msg: `${batch?.batch_number} — ${pickQty} units from ${targetLine.location_type}${partialNote}${formatNote}` });
     toast.success(`✓ Scanned ${batch?.batch_number} — ${pickQty} units from ${targetLine.location_type}${partialNote}`);
+    logScanAttempt(pickingOrderId, "SUCCESS", `Batch ${batch?.batch_number} picked ${pickQty}/${targetLine.allocated_quantity}${formatNote}`, targetLine.batch_id);
   };
 
   const confirmPicking = async (orderId: string) => {
