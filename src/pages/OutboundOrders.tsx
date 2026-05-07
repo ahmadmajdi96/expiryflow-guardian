@@ -37,7 +37,7 @@ const OutboundOrders = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("outbound_orders")
-        .select("*, outbound_order_lines(*, products(sku, name)), stores:destination_store_id(store_code)")
+        .select("*, outbound_order_lines!outbound_order_lines_outbound_order_id_fkey(*, products!outbound_order_lines_product_id_fkey(sku, name)), stores:destination_store_id(store_code)")
         .order("created_at", { ascending: false });
       return (data ?? []) as any[];
     },
