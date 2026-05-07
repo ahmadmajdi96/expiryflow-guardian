@@ -796,6 +796,39 @@ export type Database = {
           },
         ]
       }
+      reservation_audit_log: {
+        Row: {
+          batch_id: string
+          created_at: string
+          event_type: string
+          id: string
+          notes: string | null
+          order_id: string
+          quantity: number
+          user_id: string | null
+        }
+        Insert: {
+          batch_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          notes?: string | null
+          order_id: string
+          quantity?: number
+          user_id?: string | null
+        }
+        Update: {
+          batch_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          notes?: string | null
+          order_id?: string
+          quantity?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       stock_transfers: {
         Row: {
           batch_id: string
