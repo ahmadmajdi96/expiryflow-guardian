@@ -24,6 +24,7 @@ const Receiving = () => {
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [poNumber, setPoNumber] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
   const [selectedLineId, setSelectedLineId] = useState<string | null>(null);
   const [batchNumber, setBatchNumber] = useState("");
   const [expiryDate, setExpiryDate] = useState("");
@@ -98,6 +99,48 @@ const Receiving = () => {
       return;
     }
     setShelfLifeWarning(null);
+  };
+
+  // Parse QR/barcode and auto-populate batch fields
+  const handleBarcodeAutoFill = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    // QR format: BATCH:xxx|EXP:xxx|LOC:xxx|QTY:xxx
+    const qrMatch = trimmed.match(/^BATCH:([^|]+)\|EXP:([^|]+)\|LOC:([^|]+)\|QTY:(\d+)$/);
+    if (qrMatch) {
+      setBatchNumber(qrMatch[1]);
+      // Parse expiry — could be YYYY-MM-DD already
+      setExpiryDate(qrMatch[2]);
+      setLocationScan(qrMatch[3].replace(/^[^/]+\//, "")); // strip location_type prefix
+      setReceivedQty(qrMatch[4]);
+      toast.success(`QR parsed: Batch ${qrMatch[1]}, Exp ${qrMatch[2]}, Qty ${qrMatch[4]}`);
+      setBarcodeInput("");
+      return;
+    }
+    // GS1-128: (01)GTIN(10)BATCH(17)YYMMDD
+    const gs1Match = trimmed.match(/\(01\)(\d{14})\(10\)([^\(]+)(?:\(17\)(\d{6}))?/);
+    if (gs1Match) {
+      setBatchNumber(gs1Match[2]);
+      if (gs1Match[3]) {
+        const y = gs1Match[3].slice(0, 2);
+        const m = gs1Match[3].slice(2, 4);
+        const d = gs1Match[3].slice(4, 6);
+        setExpiryDate(`20${y}-${m}-${d}`);
+      }
+      toast.success(`GS1 parsed: Batch ${gs1Match[2]}`);
+      setBarcodeInput("");
+      return;
+    }
+    // Batch prefix
+    if (/^(BATCH|LOT|BN)[\-:]?\s*/i.test(trimmed)) {
+      setBatchNumber(trimmed.replace(/^(BATCH|LOT|BN)[\-:]?\s*/i, ""));
+      toast.info("Batch number auto-filled from label scan.");
+      setBarcodeInput("");
+      return;
+    }
+    // Fallback: treat as batch number
+    setBatchNumber(trimmed);
+    setBarcodeInput("");
   };
 
   // Load PO + lines
@@ -376,6 +419,18 @@ const Receiving = () => {
               <p className="text-sm text-muted-foreground">
                 {selectedLine ? selectedLine.products?.name : "Select an item"} — mandatory fields for expiry-trackable items.
               </p>
+              {/* Barcode/QR scanner input */}
+              <div className="flex gap-2 items-center p-3 rounded-lg border border-primary/30 bg-primary/5">
+                <ScanBarcode className="h-5 w-5 text-primary" />
+                <Input
+                  placeholder="Scan QR/barcode to auto-fill batch details…"
+                  className="font-mono flex-1"
+                  value={barcodeInput}
+                  onChange={(e) => setBarcodeInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleBarcodeAutoFill(barcodeInput); }}
+                />
+                <Button variant="outline" size="sm" onClick={() => handleBarcodeAutoFill(barcodeInput)}>Parse</Button>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Batch Number</Label>

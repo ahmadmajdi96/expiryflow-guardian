@@ -51,8 +51,13 @@ const OutboundOrders = () => {
   const [qcDetails, setQcDetails] = useState<Record<string, any[]>>({});
 
   // ─── Barcode format parser ───
-  const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1"; value: string; batch?: string; sku?: string; expiry?: string } => {
+  const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1" | "qr"; value: string; batch?: string; sku?: string; expiry?: string; location?: string; qty?: number } => {
     const trimmed = raw.trim();
+    // QR code format from pick slip: BATCH:xxx|EXP:xxx|LOC:xxx|QTY:xxx
+    const qrMatch = trimmed.match(/^BATCH:([^|]+)\|EXP:([^|]+)\|LOC:([^|]+)\|QTY:(\d+)$/);
+    if (qrMatch) {
+      return { type: "qr", value: trimmed, batch: qrMatch[1], expiry: qrMatch[2], location: qrMatch[3], qty: parseInt(qrMatch[4], 10) };
+    }
     // GS1-128 / GS1 DataMatrix: (01)GTIN(10)BATCH(17)EXPIRY
     const gs1Match = trimmed.match(/\(01\)(\d{14})\(10\)([^\(]+)(?:\(17\)(\d{6}))?/);
     if (gs1Match) {
@@ -329,7 +334,31 @@ const OutboundOrders = () => {
     const parsed = parseBarcodeInput(scanInput);
     let targetLine: any = null;
 
-    if (parsed.type === "gs1") {
+    if (parsed.type === "qr") {
+      // QR code: match by batch number and cross-validate expiry/location/qty
+      targetLine = (outboundPickLines ?? []).find((pl: any) =>
+        pl.inventory_batches?.batch_number === parsed.batch && pl.status === "PENDING" && !scannedPickLineIds.has(pl.id)
+      );
+      if (targetLine) {
+        const b = targetLine.inventory_batches;
+        // Validate expiry matches
+        if (parsed.expiry && b?.expiry_date && parsed.expiry !== b.expiry_date) {
+          setScanFeedback({ type: "error", msg: `QR expiry mismatch: scanned ${parsed.expiry} but allocated batch expires ${b.expiry_date}. Verify label.` });
+          toast.error("QR expiry does not match allocated batch.");
+          setScanInput("");
+          return;
+        }
+        // Validate location matches
+        const expectedLoc = `${targetLine.location_type}/${targetLine.location_code}`;
+        if (parsed.location && parsed.location !== expectedLoc && parsed.location !== targetLine.location_code) {
+          setScanFeedback({ type: "warning", msg: `QR location mismatch: scanned "${parsed.location}" but expected "${expectedLoc}". Double-check pick location.` });
+        }
+        // Validate quantity matches
+        if (parsed.qty !== undefined && parsed.qty !== targetLine.allocated_quantity) {
+          setScanFeedback({ type: "warning", msg: `QR qty mismatch: scanned ${parsed.qty} but allocated ${targetLine.allocated_quantity}. Verify pick quantity.` });
+        }
+      }
+    } else if (parsed.type === "gs1") {
       // GS1: match by batch number first, then cross-check SKU
       if (parsed.batch) {
         targetLine = (outboundPickLines ?? []).find((pl: any) =>
@@ -687,6 +716,7 @@ const OutboundOrders = () => {
                   <TooltipContent side="bottom" className="max-w-xs text-xs">
                     <p className="font-semibold mb-1">Supported barcode formats:</p>
                     <ul className="list-disc pl-3 space-y-0.5">
+                      <li><strong>QR Code:</strong> BATCH:xxx|EXP:xxx|LOC:xxx|QTY:xxx</li>
                       <li><strong>GS1-128/DataMatrix:</strong> (01)GTIN(10)BATCH(17)EXPIRY</li>
                       <li><strong>Batch label:</strong> BATCH-XXXX or LOT:XXXX</li>
                       <li><strong>Product SKU:</strong> Direct SKU scan</li>
