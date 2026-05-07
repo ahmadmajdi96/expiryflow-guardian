@@ -1,0 +1,8 @@
+version: "3.8"
+
+services:
+  corta-wms:
+    build: .
+    ports:
+      - "6001:6001"
+    restart: unless-stopped
