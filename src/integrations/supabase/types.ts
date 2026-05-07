@@ -230,6 +230,7 @@ export type Database = {
           quantity: number
           received_at: string | null
           received_by: string | null
+          reserved_quantity: number
           status: string
           store_id: string
         }
@@ -246,6 +247,7 @@ export type Database = {
           quantity?: number
           received_at?: string | null
           received_by?: string | null
+          reserved_quantity?: number
           status?: string
           store_id: string
         }
@@ -262,6 +264,7 @@ export type Database = {
           quantity?: number
           received_at?: string | null
           received_by?: string | null
+          reserved_quantity?: number
           status?: string
           store_id?: string
         }
@@ -447,6 +450,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      outbound_pick_lines: {
+        Row: {
+          allocated_quantity: number
+          batch_id: string
+          created_at: string
+          id: string
+          location_code: string | null
+          location_type: string
+          outbound_order_line_id: string
+          picked_quantity: number
+          scanned_at: string | null
+          status: string
+        }
+        Insert: {
+          allocated_quantity?: number
+          batch_id: string
+          created_at?: string
+          id?: string
+          location_code?: string | null
+          location_type?: string
+          outbound_order_line_id: string
+          picked_quantity?: number
+          scanned_at?: string | null
+          status?: string
+        }
+        Update: {
+          allocated_quantity?: number
+          batch_id?: string
+          created_at?: string
+          id?: string
+          location_code?: string | null
+          location_type?: string
+          outbound_order_line_id?: string
+          picked_quantity?: number
+          scanned_at?: string | null
+          status?: string
+        }
+        Relationships: []
       }
       pick_exceptions: {
         Row: {

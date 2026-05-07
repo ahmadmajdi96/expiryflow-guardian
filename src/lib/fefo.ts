@@ -80,7 +80,7 @@ export async function getFEFOPickingSuggestion(
 ): Promise<FEFOSuggestion[]> {
   const { data: batches } = await supabase
     .from("inventory_batches")
-    .select("id, batch_number, expiry_date, quantity, location")
+    .select("id, batch_number, expiry_date, quantity, location, reserved_quantity")
     .eq("product_id", productId)
     .eq("store_id", storeId)
     .eq("status", "AVAILABLE")
@@ -95,7 +95,9 @@ export async function getFEFOPickingSuggestion(
 
   for (const b of batches) {
     if (remaining <= 0) break;
-    const allocate = Math.min(remaining, b.quantity);
+    const available = b.quantity - (b.reserved_quantity ?? 0);
+    if (available <= 0) continue;
+    const allocate = Math.min(remaining, available);
     suggestions.push({
       batchId: b.id,
       batchNumber: b.batch_number,
@@ -121,7 +123,7 @@ export async function getFEFOTransferSuggestion(
 ): Promise<TransferSuggestion[]> {
   const { data: batches } = await supabase
     .from("inventory_batches")
-    .select("id, batch_number, expiry_date, quantity, location, product_id, store_id")
+    .select("id, batch_number, expiry_date, quantity, location, product_id, store_id, reserved_quantity")
     .eq("product_id", productId)
     .eq("store_id", fromStoreId)
     .eq("status", "AVAILABLE")
@@ -137,7 +139,9 @@ export async function getFEFOTransferSuggestion(
 
   for (const b of batches) {
     if (remaining <= 0) break;
-    const allocate = Math.min(remaining, b.quantity);
+    const available = b.quantity - (b.reserved_quantity ?? 0);
+    if (available <= 0) continue;
+    const allocate = Math.min(remaining, available);
     const daysLeft = Math.ceil((new Date(b.expiry_date).getTime() - today.getTime()) / 86400000);
     suggestions.push({
       batchId: b.id,
