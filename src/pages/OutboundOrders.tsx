@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, ChevronDown, ChevronRight, Package, Calendar, MapPin, CheckCircle, ScanBarcode, Printer, AlertTriangle, ShieldAlert, Lock, XCircle, FileText, Info } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, Package, Calendar, MapPin, CheckCircle, ScanBarcode, Printer, AlertTriangle, ShieldAlert, Lock, XCircle, FileText, Info, BarChart3, User, Clock } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { exportPickList, type PickListLine } from "@/lib/exporters";
 import { generatePickSlipPdf } from "@/lib/pickSlipPdf";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const statusMap: Record<string, { cls: string; label: string }> = {
@@ -47,6 +48,35 @@ const OutboundOrders = () => {
   const pickingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PICKING_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
+  // ─── QC details cache for blocked batches ───
+  const [qcDetails, setQcDetails] = useState<Record<string, any[]>>({});
+
+  // Fetch QC details for all blocked batches when pick lines load
+  useEffect(() => {
+    if (!outboundPickLines || outboundPickLines.length === 0) return;
+    const blockedBatchIds = outboundPickLines
+      .filter((pl: any) => {
+        const b = pl.inventory_batches;
+        return b && (b.qc_status !== "PASSED" || b.status === "QUARANTINED");
+      })
+      .map((pl: any) => pl.batch_id);
+    if (blockedBatchIds.length === 0) return;
+    const uniqueIds = [...new Set(blockedBatchIds)];
+    (async () => {
+      const { data } = await supabase
+        .from("qc_inspections")
+        .select("batch_id, result, notes, inspected_at, inspector_id")
+        .in("batch_id", uniqueIds)
+        .order("created_at", { ascending: false });
+      const map: Record<string, any[]> = {};
+      for (const r of data ?? []) {
+        if (!map[r.batch_id]) map[r.batch_id] = [];
+        if (map[r.batch_id].length < 3) map[r.batch_id].push(r);
+      }
+      setQcDetails(map);
+    })();
+  }, [outboundPickLines]);
+
   // ─── Barcode format parser ───
   const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1"; value: string; batch?: string; sku?: string; expiry?: string } => {
     const trimmed = raw.trim();
@@ -73,7 +103,7 @@ const OutboundOrders = () => {
   };
 
   // ─── Reservation release ───
-  const releaseReservations = useCallback(async (orderId: string) => {
+  const releaseReservations = useCallback(async (orderId: string, eventType: string = "UNLOCK_CANCEL") => {
     // Query order lines directly to avoid dependency on orders state
     const { data: orderLines } = await supabase
       .from("outbound_order_lines")
@@ -95,11 +125,20 @@ const OutboundOrders = () => {
         }).eq("id", pl.batch_id);
       }
       await supabase.from("outbound_pick_lines").update({ status: "CANCELLED" } as any).eq("id", pl.id);
+      // Audit log
+      await supabase.from("reservation_audit_log").insert({
+        event_type: eventType,
+        order_id: orderId,
+        batch_id: pl.batch_id,
+        quantity: pl.allocated_quantity,
+        user_id: user?.id ?? null,
+        notes: `${eventType}: Released ${pl.allocated_quantity} units`,
+      } as any);
     }
   }, []);
 
   const cancelPicking = useCallback(async (orderId: string) => {
-    await releaseReservations(orderId);
+    await releaseReservations(orderId, "UNLOCK_CANCEL");
     await supabase.from("outbound_orders").update({ status: "CONFIRMED" } as any).eq("id", orderId);
     setPickingOrderId(null);
     setFefoAllocations({});
@@ -115,18 +154,25 @@ const OutboundOrders = () => {
     if (pickingOrderId) {
       pickingTimerRef.current = setTimeout(() => {
         toast.warning("Picking session timed out (30 min). Reservations released.");
-        cancelPicking(pickingOrderId);
+        releaseReservations(pickingOrderId, "UNLOCK_TIMEOUT").then(() => {
+          supabase.from("outbound_orders").update({ status: "CONFIRMED" } as any).eq("id", pickingOrderId).then(() => {
+            setPickingOrderId(null);
+            setFefoAllocations({});
+            setScannedPickLineIds(new Set());
+            setScanFeedback(null);
+            queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
+          });
+        });
       }, PICKING_TIMEOUT_MS);
     }
     return () => { if (pickingTimerRef.current) clearTimeout(pickingTimerRef.current); };
-  }, [pickingOrderId, cancelPicking]);
+  }, [pickingOrderId, releaseReservations, queryClient]);
 
   // Release on unmount / navigation away
   useEffect(() => {
     return () => {
-      // We can't async in cleanup, but we fire-and-forget
       if (pickingOrderId) {
-        releaseReservations(pickingOrderId);
+        releaseReservations(pickingOrderId, "UNLOCK_CANCEL");
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -242,6 +288,15 @@ const OutboundOrders = () => {
             await supabase.from("inventory_batches").update({
               reserved_quantity: (batch?.reserved_quantity ?? 0) + sg.quantity,
             }).eq("id", sg.batchId);
+            // Audit log: LOCK
+            await supabase.from("reservation_audit_log").insert({
+              event_type: "LOCK",
+              order_id: id,
+              batch_id: sg.batchId,
+              quantity: sg.quantity,
+              user_id: user?.id ?? null,
+              notes: `LOCK: Reserved ${sg.quantity} units for picking`,
+            } as any);
           }
           // Update the order line with first batch reference
           if (suggestions.length > 0) {
@@ -413,6 +468,15 @@ const OutboundOrders = () => {
           reserved_quantity: newReserved,
         }).eq("id", pl.batch_id);
       }
+      // Audit log: UNLOCK_CONFIRM
+      await supabase.from("reservation_audit_log").insert({
+        event_type: "UNLOCK_CONFIRM",
+        order_id: orderId,
+        batch_id: pl.batch_id,
+        quantity: pl.picked_quantity,
+        user_id: user?.id ?? null,
+        notes: `UNLOCK_CONFIRM: Picked ${pl.picked_quantity}/${pl.allocated_quantity} units`,
+      } as any);
       await supabase.from("fefo_allocation_log").insert({
         batch_id: pl.batch_id,
         allocation_type: "OUTBOUND_PICK",
@@ -486,10 +550,56 @@ const OutboundOrders = () => {
     toast.success("Pick list exported (TXT).");
   };
 
-  const handlePrintPdf = (orderId: string) => {
+  const handleReprintPdf = async (orderId: string) => {
+    // For completed orders, fetch pick lines from DB
+    const order = (orders ?? []).find((o: any) => o.id === orderId);
+    if (!order) return;
+    const lineIds = (order.outbound_order_lines ?? []).map((l: any) => l.id);
+    const { data: dbPickLines } = await supabase
+      .from("outbound_pick_lines")
+      .select("*, inventory_batches:batch_id(batch_number, expiry_date, location, quantity, qc_status, status)")
+      .in("outbound_order_line_id", lineIds)
+      .order("created_at");
+    const pickLineData: PickListLine[] = [];
+    for (const ol of order.outbound_order_lines ?? []) {
+      const olPicks = (dbPickLines ?? []).filter((pl: any) => pl.outbound_order_line_id === ol.id);
+      if (olPicks.length > 0) {
+        for (const pl of olPicks) {
+          pickLineData.push({
+            sku: ol.products?.sku || "—",
+            productName: ol.products?.name || "—",
+            batchNumber: pl.inventory_batches?.batch_number || "—",
+            expiryDate: pl.inventory_batches?.expiry_date || "—",
+            location: pl.location_code || "—",
+            locationType: pl.location_type || "—",
+            allocated: pl.allocated_quantity,
+            picked: pl.picked_quantity,
+            status: pl.status,
+          });
+        }
+      } else {
+        const batch = ol.inventory_batches;
+        pickLineData.push({
+          sku: ol.products?.sku || "—",
+          productName: ol.products?.name || "—",
+          batchNumber: batch?.batch_number || "—",
+          expiryDate: batch?.expiry_date || "—",
+          location: batch?.location || "—",
+          locationType: "—",
+          allocated: ol.quantity_ordered,
+          picked: ol.quantity_picked,
+          status: ol.quantity_picked >= ol.quantity_ordered ? "PICKED" : "PENDING",
+        });
+      }
+    }
+    await generatePickSlipPdf(order.order_number, order.customer_name || "", order.ship_date || "", pickLineData);
+    toast.success("PDF pick slip generated.");
+  };
+
+  const handlePrintPdf = async (orderId: string) => {
     const result = buildPickLineData(orderId);
     if (!result) return;
-    generatePickSlipPdf(
+    await generatePickSlipPdf(
       result.order.order_number,
       result.order.customer_name || "",
       result.order.ship_date || "",
@@ -528,10 +638,13 @@ const OutboundOrders = () => {
       if (r.status === "SHIPPED" || r.status === "DELIVERED") {
         return (
           <div className="flex gap-1">
-            <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPdf(r.id); }}><FileText className="h-3 w-3 mr-1" />PDF</Button>
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handleReprintPdf(r.id); }}><FileText className="h-3 w-3 mr-1" />Reprint PDF</Button>
             <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handlePrintPickList(r.id); }}><Printer className="h-3 w-3 mr-1" />TXT</Button>
           </div>
         );
+      }
+      if (r.status === "PICKING" && pickingOrderId !== r.id) {
+        return <Button variant="outline" size="sm" className="text-xs h-7" onClick={(e) => { e.stopPropagation(); handleReprintPdf(r.id); }}><FileText className="h-3 w-3 mr-1" />PDF</Button>;
       }
       if (!nextStatus) return null;
       return <Button variant="outline" size="sm" className="text-xs h-7" disabled={pickingInProgress} onClick={(e) => { e.stopPropagation(); advanceStatus(r.id, nextStatus); }}>{pickingInProgress && nextStatus === "PICKING" ? "Allocating…" : labels[nextStatus] || nextStatus}</Button>;
@@ -590,6 +703,84 @@ const OutboundOrders = () => {
             )}
           </div>
         )}
+        {/* Scanning Progress Indicator */}
+        {isActivePick && pickLinesForOrder.length > 0 && (() => {
+          const totalLines = pickLinesForOrder.filter((pl: any) => pl.status !== "CANCELLED").length;
+          const scannedLines = pickLinesForOrder.filter((pl: any) => pl.status === "PICKED" || pl.status === "PARTIAL").length;
+          const totalUnits = pickLinesForOrder.filter((pl: any) => pl.status !== "CANCELLED").reduce((s: number, pl: any) => s + pl.allocated_quantity, 0);
+          const pickedUnits = pickLinesForOrder.reduce((s: number, pl: any) => s + (pl.picked_quantity ?? 0), 0);
+          const pct = totalUnits > 0 ? Math.round((pickedUnits / totalUnits) * 100) : 0;
+          const remaining = pickLinesForOrder.filter((pl: any) => pl.status === "PENDING");
+          return (
+            <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-semibold">Scan Progress</span>
+                </div>
+                <span className="text-xs text-muted-foreground">{scannedLines}/{totalLines} lines · {pickedUnits}/{totalUnits} units · {pct}%</span>
+              </div>
+              <Progress value={pct} className="h-2" />
+              {remaining.length > 0 && (
+                <div className="space-y-1">
+                  <span className="text-xs font-semibold text-muted-foreground">Remaining batches to scan:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {remaining.map((pl: any) => (
+                      <Badge key={pl.id} variant="outline" className="text-[10px] font-mono bg-muted/50">
+                        {pl.inventory_batches?.batch_number || "?"} × {pl.allocated_quantity}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {remaining.length === 0 && (
+                <div className="flex items-center gap-1 text-success text-xs font-semibold">
+                  <CheckCircle className="h-3.5 w-3.5" /> All lines scanned — ready to confirm
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        {/* QC/Quarantine Banners for blocked batches */}
+        {isActivePick && pickLinesForOrder.filter((pl: any) => {
+          const b = pl.inventory_batches;
+          return b && (b.qc_status !== "PASSED" || b.status === "QUARANTINED");
+        }).map((pl: any) => {
+          const b = pl.inventory_batches;
+          const inspections = qcDetails[pl.batch_id] ?? [];
+          return (
+            <Alert key={`qc-banner-${pl.id}`} variant="destructive" className="border-destructive/40">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertTitle className="flex items-center gap-2 text-sm">
+                Batch <Link to={`/batch/${pl.batch_id}`} className="font-mono underline hover:no-underline">{b?.batch_number}</Link> — {b?.status === "QUARANTINED" ? "QUARANTINED" : `QC ${b?.qc_status}`}
+              </AlertTitle>
+              <AlertDescription className="text-xs space-y-1 mt-1">
+                <p>This batch is <strong>blocked from picking</strong>. Allocated {pl.allocated_quantity} units cannot be fulfilled from this batch.</p>
+                {inspections.length > 0 ? (
+                  <div className="space-y-0.5 mt-1">
+                    {inspections.map((insp: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 text-[11px]">
+                        <Badge variant="outline" className="text-[10px] py-0">{insp.result}</Badge>
+                        <span>{insp.notes || "No notes"}</span>
+                        {insp.inspected_at && (
+                          <span className="flex items-center gap-0.5 text-muted-foreground"><Clock className="h-3 w-3" />{new Date(insp.inspected_at).toLocaleDateString()}</span>
+                        )}
+                        {insp.inspector_id && (
+                          <span className="flex items-center gap-0.5 text-muted-foreground"><User className="h-3 w-3" />{insp.inspector_id.slice(0, 8)}…</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground italic">No QC inspection records found for this batch.</p>
+                )}
+                <Link to={`/batch/${pl.batch_id}`} className="inline-flex items-center gap-1 text-primary hover:underline mt-1">
+                  View batch details →
+                </Link>
+              </AlertDescription>
+            </Alert>
+          );
+        })}
         {orderLines.length === 0 && <p className="text-sm text-muted-foreground">No line items.</p>}
         {orderLines.map((line: any) => {
           const linePicks = pickLinesForOrder.filter((pl: any) => pl.outbound_order_line_id === line.id);
@@ -638,21 +829,11 @@ const OutboundOrders = () => {
                         {daysLeft !== null && <span className="tabular-nums">{daysLeft}d</span>}
                         {zone && <Badge variant="outline" className={`text-[10px] py-0 ${zoneClass[zone] || ""}`}>{zone}</Badge>}
                         {isBlocked && (
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[10px] py-0 cursor-help">
-                                  {b?.status === "QUARANTINED" ? "QUARANTINED" : `QC: ${b?.qc_status}`}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-xs text-xs">
-                                <p>This batch cannot be picked.</p>
-                                <p><strong>Status:</strong> {b?.status}</p>
-                                <p><strong>QC Status:</strong> {b?.qc_status}</p>
-                                <p className="text-muted-foreground mt-1">Scan this batch to see detailed QC failure reasons.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
+                          <Link to={`/batch/${pl.batch_id}`}>
+                            <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30 text-[10px] py-0 cursor-pointer hover:bg-destructive/20">
+                              {b?.status === "QUARANTINED" ? "QUARANTINED" : `QC: ${b?.qc_status}`} ↗
+                            </Badge>
+                          </Link>
                         )}
                         <span className="flex items-center gap-1 text-muted-foreground"><MapPin className="h-3 w-3" />{pl.location_code || "—"}</span>
                         <span className="ml-auto font-semibold tabular-nums">{pl.picked_quantity}/{pl.allocated_quantity}</span>
