@@ -48,7 +48,7 @@ const PickRequests = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("pick_requests")
-        .select("*, products(sku, name), stores(store_code)")
+        .select("*, products!inventory_batches_product_id_fkey(sku, name), stores!inventory_batches_store_id_fkey(store_code)")
         .order("created_at", { ascending: false })
         .limit(50);
       return data ?? [];

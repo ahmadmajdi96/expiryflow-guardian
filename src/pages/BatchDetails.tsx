@@ -26,7 +26,7 @@ const BatchDetails = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_batches")
-        .select("*, products(sku, name, current_price, unit_cost, shelf_life_days), stores(store_code, name)")
+        .select("*, products!inventory_batches_product_id_fkey(sku, name, current_price, unit_cost, shelf_life_days), stores!inventory_batches_store_id_fkey(store_code, name)")
         .eq("id", id!)
         .single();
       return data;

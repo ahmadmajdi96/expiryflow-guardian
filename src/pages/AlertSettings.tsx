@@ -102,7 +102,7 @@ const AlertSettings = () => {
     try {
       const { data: batches } = await supabase
         .from("inventory_batches")
-        .select("id, batch_number, expiry_date, quantity, products(sku, name, current_price, unit_cost), stores(store_code)")
+        .select("id, batch_number, expiry_date, quantity, products!inventory_batches_product_id_fkey(sku, name, current_price, unit_cost), stores!inventory_batches_store_id_fkey(store_code)")
         .eq("status", "AVAILABLE")
         .eq("qc_status", "PASSED");
 
@@ -138,7 +138,7 @@ const AlertSettings = () => {
       // Get all available batches in warning zones
       const { data: batches } = await supabase
         .from("inventory_batches")
-        .select("id, batch_number, expiry_date, quantity, product_id, store_id, products(sku, current_price, unit_cost), stores(store_code)")
+        .select("id, batch_number, expiry_date, quantity, product_id, store_id, products!inventory_batches_product_id_fkey(sku, current_price, unit_cost), stores!inventory_batches_store_id_fkey(store_code)")
         .eq("status", "AVAILABLE")
         .eq("qc_status", "PASSED");
 
