@@ -48,34 +48,7 @@ const OutboundOrders = () => {
   const pickingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PICKING_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
-  // ─── QC details cache for blocked batches ───
   const [qcDetails, setQcDetails] = useState<Record<string, any[]>>({});
-
-  // Fetch QC details for all blocked batches when pick lines load
-  useEffect(() => {
-    if (!outboundPickLines || outboundPickLines.length === 0) return;
-    const blockedBatchIds = outboundPickLines
-      .filter((pl: any) => {
-        const b = pl.inventory_batches;
-        return b && (b.qc_status !== "PASSED" || b.status === "QUARANTINED");
-      })
-      .map((pl: any) => pl.batch_id);
-    if (blockedBatchIds.length === 0) return;
-    const uniqueIds = [...new Set(blockedBatchIds)];
-    (async () => {
-      const { data } = await supabase
-        .from("qc_inspections")
-        .select("batch_id, result, notes, inspected_at, inspector_id")
-        .in("batch_id", uniqueIds)
-        .order("created_at", { ascending: false });
-      const map: Record<string, any[]> = {};
-      for (const r of data ?? []) {
-        if (!map[r.batch_id]) map[r.batch_id] = [];
-        if (map[r.batch_id].length < 3) map[r.batch_id].push(r);
-      }
-      setQcDetails(map);
-    })();
-  }, [outboundPickLines]);
 
   // ─── Barcode format parser ───
   const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1"; value: string; batch?: string; sku?: string; expiry?: string } => {
@@ -222,6 +195,32 @@ const OutboundOrders = () => {
       return data ?? [];
     },
   });
+
+  // ─── QC details cache for blocked batches ───
+  useEffect(() => {
+    if (!outboundPickLines || outboundPickLines.length === 0) return;
+    const blockedBatchIds = (outboundPickLines as any[])
+      .filter((pl) => {
+        const b = pl.inventory_batches;
+        return b && (b.qc_status !== "PASSED" || b.status === "QUARANTINED");
+      })
+      .map((pl) => pl.batch_id);
+    if (blockedBatchIds.length === 0) return;
+    const uniqueIds = [...new Set(blockedBatchIds)];
+    (async () => {
+      const { data } = await supabase
+        .from("qc_inspections")
+        .select("batch_id, result, notes, inspected_at, inspector_id")
+        .in("batch_id", uniqueIds)
+        .order("created_at", { ascending: false });
+      const map: Record<string, any[]> = {};
+      for (const r of data ?? []) {
+        if (!map[r.batch_id]) map[r.batch_id] = [];
+        if (map[r.batch_id].length < 3) map[r.batch_id].push(r);
+      }
+      setQcDetails(map);
+    })();
+  }, [outboundPickLines]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
