@@ -1,8 +1,13 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { PickListLine } from "./exporters";
+import QRCode from "qrcode";
 
-export function generatePickSlipPdf(
+async function generateQRDataUrl(text: string): Promise<string> {
+  return QRCode.toDataURL(text, { width: 80, margin: 1, errorCorrectionLevel: "M" });
+}
+
+export async function generatePickSlipPdf(
   orderNumber: string,
   customerName: string,
   shipDate: string,
@@ -49,7 +54,6 @@ export function generatePickSlipPdf(
   doc.setDrawColor(200, 200, 220);
   doc.line(14, infoY + 10, pageW - 14, infoY + 10);
 
-  // Table
   const totalAllocated = pickLines.reduce((s, l) => s + l.allocated, 0);
   const totalPicked = pickLines.reduce((s, l) => s + l.picked, 0);
 
@@ -90,18 +94,69 @@ export function generatePickSlipPdf(
     },
   });
 
-  // Totals footer
   const finalY = (doc as any).lastAutoTable?.finalY ?? 200;
+
+  // QR code section — one per picked batch
+  let qrY = finalY + 6;
+  const qrSize = 18;
+  const qrColWidth = (pageW - 28) / 3;
+  const pickedBatches = pickLines.filter(l => l.batchNumber !== "—");
+  if (pickedBatches.length > 0) {
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(67, 56, 202);
+    doc.text("Batch QR Codes (scan for verification)", 14, qrY);
+    qrY += 4;
+
+    for (let i = 0; i < pickedBatches.length; i++) {
+      const col = i % 3;
+      if (col === 0 && i > 0) qrY += qrSize + 10;
+      // Page overflow check
+      if (qrY + qrSize + 10 > doc.internal.pageSize.getHeight() - 20) {
+        doc.addPage();
+        qrY = 14;
+      }
+      const x = 14 + col * qrColWidth;
+      const l = pickedBatches[i];
+      const qrText = `BATCH:${l.batchNumber}|EXP:${l.expiryDate}|LOC:${l.locationType}/${l.location}|QTY:${l.picked}`;
+      try {
+        const qrImg = await generateQRDataUrl(qrText);
+        doc.addImage(qrImg, "PNG", x, qrY, qrSize, qrSize);
+      } catch {
+        doc.setFillColor(230, 230, 230);
+        doc.rect(x, qrY, qrSize, qrSize, "F");
+      }
+      doc.setFontSize(6);
+      doc.setFont("courier", "normal");
+      doc.setTextColor(60, 60, 80);
+      doc.text(l.batchNumber, x + qrSize + 2, qrY + 4);
+      doc.text(`Exp: ${l.expiryDate}`, x + qrSize + 2, qrY + 8);
+      doc.text(`${l.locationType}/${l.location}`, x + qrSize + 2, qrY + 12);
+      doc.text(`Qty: ${l.picked}/${l.allocated}`, x + qrSize + 2, qrY + 16);
+    }
+    qrY += qrSize + 8;
+  } else {
+    qrY = finalY + 4;
+  }
+
+  // Totals footer
   doc.setDrawColor(67, 56, 202);
   doc.setLineWidth(0.5);
-  doc.line(14, finalY + 4, pageW - 14, finalY + 4);
+  if (qrY + 20 > doc.internal.pageSize.getHeight() - 20) {
+    doc.addPage();
+    qrY = 14;
+  }
+  doc.line(14, qrY, pageW - 14, qrY);
   doc.setFontSize(11);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(30, 30, 50);
-  doc.text(`TOTAL:  ${totalPicked} / ${totalAllocated} units`, 14, finalY + 12);
+  doc.text(`TOTAL:  ${totalPicked} / ${totalAllocated} units`, 14, qrY + 8);
 
   // Signature line
-  const sigY = finalY + 28;
+  const sigY = qrY + 22;
+  if (sigY + 14 > doc.internal.pageSize.getHeight() - 20) {
+    doc.addPage();
+  }
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.setTextColor(100, 100, 120);
