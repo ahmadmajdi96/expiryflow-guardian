@@ -47,8 +47,24 @@ const OutboundOrders = () => {
   const [scanFeedback, setScanFeedback] = useState<{ type: "success" | "error" | "warning"; msg: string } | null>(null);
   const pickingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const PICKING_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const [lastScanTargetLineId, setLastScanTargetLineId] = useState<string | null>(null);
+  const [scanAttemptCount, setScanAttemptCount] = useState(0);
 
   const [qcDetails, setQcDetails] = useState<Record<string, any[]>>({});
+
+  // Log scan attempt to audit trail (non-blocking)
+  const logScanAttempt = useCallback(async (orderId: string, outcome: string, details: string, batchId?: string) => {
+    try {
+      await supabase.from("reservation_audit_log").insert({
+        event_type: "LOCK",
+        order_id: orderId,
+        batch_id: batchId || "00000000-0000-0000-0000-000000000000",
+        quantity: 0,
+        user_id: user?.id ?? null,
+        notes: `SCAN_${outcome}: ${details}`,
+      } as any);
+    } catch { /* non-blocking */ }
+  }, [user]);
 
   // ─── Barcode format parser ───
   const parseBarcodeInput = (raw: string): { type: "batch" | "sku" | "gs1" | "qr"; value: string; batch?: string; sku?: string; expiry?: string; location?: string; qty?: number } => {
@@ -122,6 +138,8 @@ const OutboundOrders = () => {
     setFefoAllocations({});
     setScannedPickLineIds(new Set());
     setScanFeedback(null);
+    setLastScanTargetLineId(null);
+    setScanAttemptCount(0);
     queryClient.invalidateQueries({ queryKey: ["outbound-orders"] });
     toast.info("Picking cancelled — all reservations released.");
   }, [releaseReservations, queryClient]);
