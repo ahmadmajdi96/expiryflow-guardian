@@ -32,7 +32,7 @@ const Dashboard = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("inventory_batches")
-        .select("*, products(sku, name), stores(store_code)")
+        .select("*, products!inventory_batches_product_id_fkey(sku, name), stores!inventory_batches_store_id_fkey(store_code)")
         .eq("status", "AVAILABLE")
         .order("expiry_date", { ascending: true });
       return data ?? [];

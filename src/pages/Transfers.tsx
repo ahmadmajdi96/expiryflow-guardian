@@ -33,7 +33,7 @@ const Transfers = () => {
     queryFn: async () => {
       const { data } = await supabase
         .from("stock_transfers")
-        .select("*, inventory_batches(batch_number, expiry_date, product_id, products(sku, name)), from_store:stores!stock_transfers_from_store_id_fkey(store_code), to_store:stores!stock_transfers_to_store_id_fkey(store_code)")
+        .select("*, inventory_batches!stock_transfers_batch_id_fkey(batch_number, expiry_date, product_id, products!inventory_batches_product_id_fkey(sku, name)), from_store:stores!stock_transfers_from_store_id_fkey(store_code), to_store:stores!stock_transfers_to_store_id_fkey(store_code)")
         .order("created_at", { ascending: false });
       return data ?? [];
     },

@@ -107,7 +107,7 @@ const Receiving = () => {
       if (!poNumber) return null;
       const { data: po } = await supabase
         .from("purchase_orders")
-        .select("*, po_lines(*, products(sku, name, shelf_life_days, expiry_trackable))")
+        .select("*, po_lines!po_lines_po_id_fkey(*, products!po_lines_product_id_fkey(sku, name, shelf_life_days, expiry_trackable))")
         .eq("po_number", poNumber)
         .single();
       return po;
