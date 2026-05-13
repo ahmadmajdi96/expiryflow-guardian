@@ -19,9 +19,9 @@ serve(async (req) => {
     // Pull live snapshot
     const today = new Date();
     const [{ data: batches }, { data: alerts }, { data: quarantined }, { data: products }] = await Promise.all([
-      supabase.from("inventory_batches").select("batch_number, quantity, expiry_date, location, status, qc_status, products!inventory_batches_product_id_fkey(sku, name), stores!inventory_batches_store_id_fkey(store_code)").in("status", ["AVAILABLE", "QUARANTINED"]).order("expiry_date").limit(200),
-      supabase.from("expiry_alerts").select("alert_id, zone, days_until_expiry, resolved").eq("resolved", false).limit(50),
-      supabase.from("inventory_batches").select("batch_number, qc_status, quantity").eq("status", "QUARANTINED").limit(50),
+      supabase.from("inventory_batches").select("id, batch_number, quantity, expiry_date, location, status, qc_status, products!inventory_batches_product_id_fkey(sku, name), stores!inventory_batches_store_id_fkey(store_code)").in("status", ["AVAILABLE", "QUARANTINED"]).order("expiry_date").limit(200),
+      supabase.from("expiry_alerts").select("alert_id, zone, days_until_expiry, resolved, batch_id").eq("resolved", false).order("days_until_expiry", { ascending: true }).limit(50),
+      supabase.from("inventory_batches").select("id, batch_number, qc_status, quantity").eq("status", "QUARANTINED").limit(50),
       supabase.from("products").select("sku, name, category, shelf_life_days, current_price").limit(100),
     ]);
 
@@ -47,6 +47,15 @@ serve(async (req) => {
     const systemPrompt = `You are CORTA AI, an expert assistant embedded in the CORTA ExpirySmart WMS.
 You answer questions about inventory, near-expiry stock, FEFO, quarantine, and operations using the live snapshot below.
 Be concise (2-5 sentences), use bullet points where helpful, cite specific batch numbers/SKUs when relevant.
+
+ACTIONABLE LINKS — when you mention a specific batch, ALWAYS render it as a markdown link to /batch/{id}, e.g. [B240501-001](/batch/<uuid>).
+Also surface relevant page links when useful:
+- Quarantine triage → [Quarantine](/quarantine)
+- Markdown approvals → [Markdown Approvals](/markdown-approvals)
+- Expiry alerts → [Expiry Alerts](/expiry-alerts)
+- Forecast → [Forecast](/forecast)
+
+End answers about near-expiry stock with one or two **recommended actions** (e.g. "Propose markdown", "Move to PICKFACE", "Create write-off task") tied to specific batches.
 If asked about something outside the snapshot, say so and suggest a screen to check.
 
 LIVE DATA SNAPSHOT (JSON):
