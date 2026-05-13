@@ -24,6 +24,7 @@ import UserManagement from "./pages/UserManagement";
 import InboundOrders from "./pages/InboundOrders";
 import OutboundOrders from "./pages/OutboundOrders";
 import Showcase from "./pages/Showcase";
+import Forecast from "./pages/Forecast";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/users" element={<Wrap><UserManagement /></Wrap>} />
             <Route path="/inbound-orders" element={<Wrap><InboundOrders /></Wrap>} />
             <Route path="/outbound-orders" element={<Wrap><OutboundOrders /></Wrap>} />
+            <Route path="/forecast" element={<Wrap><Forecast /></Wrap>} />
             <Route path="/showcase" element={<Showcase />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
