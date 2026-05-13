@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { MessageSquare, X, Send, Bot, User, Loader2, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
+import { useNavigate } from "react-router-dom";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -13,6 +14,7 @@ const SUGGESTIONS = [
 ];
 
 const WMSAssistantChat = () => {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([
     { role: "assistant", content: "Hi — I'm **CORTA AI**. Ask me about your live inventory, expiries, FEFO, quarantine, or alerts." },
@@ -80,7 +82,28 @@ const WMSAssistantChat = () => {
                 <div className={`max-w-[82%] px-3 py-2 rounded-xl text-xs leading-relaxed ${m.role === "user" ? "bg-primary text-primary-foreground rounded-br-sm" : "bg-muted text-foreground rounded-bl-sm"}`}>
                   {m.role === "assistant" ? (
                     <div className="prose prose-xs max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0.5 [&_strong]:font-semibold">
-                      <ReactMarkdown>{m.content}</ReactMarkdown>
+                      <ReactMarkdown
+                        components={{
+                          a: ({ href, children }) => {
+                            const isInternal = href?.startsWith("/");
+                            return (
+                              <a
+                                href={href}
+                                onClick={(e) => {
+                                  if (isInternal && href) {
+                                    e.preventDefault();
+                                    setOpen(false);
+                                    navigate(href);
+                                  }
+                                }}
+                                className="text-primary underline underline-offset-2 hover:opacity-80"
+                              >
+                                {children}
+                              </a>
+                            );
+                          },
+                        }}
+                      >{m.content}</ReactMarkdown>
                     </div>
                   ) : (
                     m.content
