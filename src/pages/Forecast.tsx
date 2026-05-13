@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import PageHeader from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, Loader2, AlertTriangle, Sparkles } from "lucide-react";
+import { TrendingUp, Loader2, AlertTriangle, Sparkles, Tag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { DataTable, DataTableColumn } from "@/components/DataTable";
+import { useAuth } from "@/hooks/useAuth";
 
 type Forecast = {
   sku: string; store: string; name?: string; category?: string;
@@ -23,23 +24,109 @@ const riskClass: Record<string, string> = {
 };
 
 const Forecast = () => {
+  const { user } = useAuth();
   const [horizon, setHorizon] = useState(14);
   const [loading, setLoading] = useState(false);
   const [forecasts, setForecasts] = useState<Forecast[]>([]);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [auditId, setAuditId] = useState<string | null>(null);
+  const [actioningKey, setActioningKey] = useState<string | null>(null);
 
   const run = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("wms-forecast", { body: { horizonDays: horizon } });
+      const { data, error } = await supabase.functions.invoke("wms-forecast", { body: { horizonDays: horizon, userId: user?.id } });
       if (error) throw error;
       setForecasts(data?.forecasts ?? []);
       setGeneratedAt(data?.generatedAt ?? null);
+      setAuditId(data?.auditId ?? null);
       toast.success(`Forecast generated for ${data?.forecasts?.length ?? 0} SKU/store combos`);
     } catch (e: any) {
       toast.error(e.message || "Forecast failed");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const recordDecision = async (decision: string) => {
+    if (!auditId) return;
+    await supabase.from("ai_audit_log").update({ user_decision: decision, decision_at: new Date().toISOString() }).eq("id", auditId);
+  };
+
+  const requestMarkdown = async (f: Forecast) => {
+    const key = `${f.sku}@${f.store}`;
+    setActioningKey(key);
+    try {
+      // Find a batch for this SKU/store to attach to
+      const { data: prod } = await supabase.from("products").select("id").eq("sku", f.sku).maybeSingle();
+      const { data: store } = await supabase.from("stores").select("id").eq("store_code", f.store).maybeSingle();
+      if (!prod || !store) throw new Error("Product or store not found");
+      const { data: batch } = await supabase
+        .from("inventory_batches")
+        .select("id, batch_number, quantity, expiry_date")
+        .eq("product_id", prod.id)
+        .eq("store_id", store.id)
+        .eq("status", "AVAILABLE")
+        .order("expiry_date", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (!batch) throw new Error("No available batch found");
+      const discount = f.writeOffRisk === "CRITICAL" ? 50 : f.writeOffRisk === "HIGH" ? 35 : f.writeOffRisk === "MEDIUM" ? 20 : 10;
+      const current = f.price ?? 0;
+      const proposed = +(current * (1 - discount / 100)).toFixed(2);
+      const { error } = await supabase.from("markdown_proposals").insert({
+        batch_id: batch.id,
+        batch_number: batch.batch_number,
+        sku: f.sku,
+        current_price: current,
+        proposed_price: proposed,
+        discount_percent: discount,
+        urgency: f.writeOffRisk,
+        status: "pending",
+        reasoning: `Forecast horizon ${horizon}d: ${f.predictedWriteOffUnits} units at ${f.writeOffRisk} write-off risk. ${f.recommendation}`,
+      });
+      if (error) throw error;
+      await recordDecision(`MARKDOWN_REQUESTED:${f.sku}@${f.store}`);
+      toast.success(`Markdown proposal created for ${f.sku} (${discount}% off)`);
+    } catch (e: any) {
+      toast.error(e.message || "Markdown request failed");
+    } finally {
+      setActioningKey(null);
+    }
+  };
+
+  const createWriteOffTask = async (f: Forecast) => {
+    const key = `${f.sku}@${f.store}`;
+    setActioningKey(key);
+    try {
+      const { data: prod } = await supabase.from("products").select("id").eq("sku", f.sku).maybeSingle();
+      const { data: store } = await supabase.from("stores").select("id").eq("store_code", f.store).maybeSingle();
+      const { data: batch } = prod && store ? await supabase
+        .from("inventory_batches")
+        .select("id")
+        .eq("product_id", prod.id)
+        .eq("store_id", store.id)
+        .eq("status", "AVAILABLE")
+        .order("expiry_date", { ascending: true })
+        .limit(1)
+        .maybeSingle() : { data: null };
+      const { error } = await supabase.from("write_off_tasks").insert({
+        batch_id: batch?.id ?? null,
+        sku: f.sku,
+        store: f.store,
+        quantity: f.predictedWriteOffUnits,
+        reason: `AI forecast: ${f.writeOffRisk} risk over ${horizon}d. ${f.recommendation}`,
+        source: "FORECAST",
+        status: "OPEN",
+        created_by: user?.id,
+      });
+      if (error) throw error;
+      await recordDecision(`WRITE_OFF_TASK:${f.sku}@${f.store}`);
+      toast.success(`Write-off task created (${f.predictedWriteOffUnits} units)`);
+    } catch (e: any) {
+      toast.error(e.message || "Write-off task failed");
+    } finally {
+      setActioningKey(null);
     }
   };
 
@@ -59,6 +146,20 @@ const Forecast = () => {
     { key: "writeOffRisk", header: "Risk", accessor: (r) => r.writeOffRisk, filter: "select", options: ["LOW","MEDIUM","HIGH","CRITICAL"], cell: (r) => <Badge variant="outline" className={`${riskClass[r.writeOffRisk]} text-xs`}>{r.writeOffRisk}</Badge> },
     { key: "confidence", header: "Conf.", accessor: (r) => r.confidence, filter: "select", cell: (r) => <span className="text-xs text-muted-foreground">{r.confidence}</span> },
     { key: "recommendation", header: "AI recommendation", accessor: (r) => r.recommendation, cell: (r) => <span className="text-xs">{r.recommendation}</span> },
+    { key: "actions", header: "Actions", accessor: () => "", exportable: false, cell: (r) => {
+      const key = `${r.sku}@${r.store}`;
+      const busy = actioningKey === key;
+      return (
+        <div className="flex gap-1">
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={busy} onClick={() => requestMarkdown(r)}>
+            <Tag className="h-3 w-3 mr-1" /> Markdown
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 text-xs text-destructive border-destructive/30" disabled={busy || r.predictedWriteOffUnits <= 0} onClick={() => createWriteOffTask(r)}>
+            <Trash2 className="h-3 w-3 mr-1" /> Write-off
+          </Button>
+        </div>
+      );
+    }},
   ];
 
   return (
