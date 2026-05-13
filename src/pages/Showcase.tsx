@@ -10,7 +10,7 @@ import ShowcaseAIChat from "@/components/showcase/ShowcaseAIChat";
 
 const Showcase = () => {
   return (
-    <div className="min-h-screen bg-[hsl(220,20%,7%)] text-[hsl(210,20%,90%)] scrollbar-thin">
+    <div className="pp-dark min-h-screen text-foreground scrollbar-thin">
       <ShowcaseNavigation />
       <ShowcaseHero />
       <ShowcaseArchitecture />
