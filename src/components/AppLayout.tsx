@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import {
   Boxes, LayoutDashboard, AlertTriangle, ScanBarcode, ClipboardCheck,
   ArrowRightLeft, Settings, LogOut, Shield, Tag, PackageSearch, ScrollText,
-  Package, Store, Users, Menu, ArrowDownToLine, ArrowUpFromLine
+  Package, Store, Users, Menu, ArrowDownToLine, ArrowUpFromLine, TrendingUp
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRole } from "@/hooks/useRole";
+import WMSAssistantChat from "@/components/WMSAssistantChat";
 
 type NavItem = { to: string; label: string; icon: any };
 type NavSection = { label: string; items: NavItem[] };
@@ -24,6 +25,7 @@ const sections: NavSection[] = [
       { to: "/markdown-approvals", label: "Markdown Approvals", icon: Tag },
       { to: "/inbound-orders", label: "Inbound Orders", icon: ArrowDownToLine },
       { to: "/outbound-orders", label: "Outbound Orders", icon: ArrowUpFromLine },
+      { to: "/forecast", label: "AI Forecast", icon: TrendingUp },
     ],
   },
   {
@@ -118,6 +120,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         </div>
         <div className="px-4 py-4 lg:px-8 lg:py-6 max-w-[1600px] mx-auto animate-fade-in">{children}</div>
       </main>
+      <WMSAssistantChat />
     </div>
   );
 };
