@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { horizonDays = 14 } = await req.json().catch(() => ({}));
+    const { horizonDays = 14, userId } = await req.json().catch(() => ({}));
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
     const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
@@ -78,7 +78,17 @@ ${JSON.stringify(items, null, 2)}`;
       const ctx = items.find((i: any) => i.sku === f.sku && i.store === f.store);
       return { ...f, name: ctx?.name, category: ctx?.category, totalQty: ctx?.totalQty, soonestExpiry: ctx?.soonestExpiry, soonestDays: ctx?.soonestDays, price: ctx?.price };
     });
-    return new Response(JSON.stringify({ horizonDays, generatedAt: today.toISOString(), forecasts: merged }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const { data: audit } = await supabase.from("ai_audit_log").insert({
+      feature: "FORECAST",
+      prompt: systemPrompt,
+      input: { horizonDays, snapshotItems: items.length },
+      output: { forecasts: merged.slice(0, 100) },
+      confidence: null,
+      user_id: userId ?? null,
+    }).select("id").single();
+
+    return new Response(JSON.stringify({ horizonDays, generatedAt: today.toISOString(), forecasts: merged, auditId: audit?.id ?? null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("wms-forecast error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
