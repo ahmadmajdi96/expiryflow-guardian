@@ -65,7 +65,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             <Boxes className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <div className="font-bold tracking-tight text-sidebar-foreground">CORTA</div>
+            <div className="font-bold tracking-tight text-sidebar-foreground">CORTA WMS</div>
             <div className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "hsl(var(--sidebar-muted))" }}>ExpirySmart WMS</div>
           </div>
         </div>
