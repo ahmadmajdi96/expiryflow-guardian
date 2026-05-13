@@ -99,6 +99,13 @@ const Quarantine = () => {
     mutationFn: async (id: string) => {
       await supabase.from("inventory_batches").update({ status: "WRITTEN_OFF", quantity: 0 }).eq("id", id);
     },
+    onSuccess: () => {
+      toast.success("Batch written off.");
+      queryClient.invalidateQueries({ queryKey: ["quarantine-batches"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const runBulkTriage = async (rows: any[]) => {
     setBulkOpen(true);
     setBulkLoading(true);
@@ -135,12 +142,6 @@ const Quarantine = () => {
     setBulkOpen(false);
     setBulkResults([]);
   };
-    onSuccess: () => {
-      toast.success("Batch written off.");
-      queryClient.invalidateQueries({ queryKey: ["quarantine-batches"] });
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
 
   const columns: DataTableColumn<any>[] = [
     { key: "batch_number", header: "Batch #", accessor: (r) => r.batch_number, sortable: true, filter: "text", cell: (r) => (
