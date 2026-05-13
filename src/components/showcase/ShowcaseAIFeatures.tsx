@@ -1,12 +1,14 @@
-import { Brain, ScanText, Boxes, TrendingUp, ShieldAlert, MessageSquare, Tag } from "lucide-react";
+import { Brain, ScanText, Boxes, TrendingUp, ShieldAlert, MessageSquare, Tag, Bell, Webhook } from "lucide-react";
 
 const aiFeatures = [
-  { icon: ScanText, title: "Smart Receiving (OCR + NLP)", desc: "Paste a supplier delivery note or OCR text — AI extracts batch number, expiry date, qty and location and pre-fills the receiving form in seconds." },
-  { icon: Boxes, title: "AI FEFO Putaway", desc: "Recommends optimal pickface vs. reserve location based on live stock and expiry windows, with a 'why this location' explanation and pickface swap suggestions." },
-  { icon: TrendingUp, title: "Demand & Waste Forecast", desc: "Predicts 7/14/30-day sell-through and write-off risk per SKU/store using stock depth, expiry pressure and historical movement — with confidence scores." },
-  { icon: Tag, title: "AI Markdown Proposals", desc: "Generates discount % proposals from forecast risk; one-click approval pushes the new price live and logs the decision." },
-  { icon: ShieldAlert, title: "AI Quarantine Triage", desc: "Single-batch and bulk triage. Suggests RELEASE / WRITE-OFF / RETURN-TO-SUPPLIER with severity, reasoning and confidence — bulk-execute in one step." },
-  { icon: MessageSquare, title: "AI Expiry Assistant (Chat)", desc: "Natural-language Q&A over your live near-expiry inventory. Answers reference batch UUIDs and link directly to batch detail pages." },
+  { icon: ScanText, title: "Smart Receiving (OCR + NLP)", desc: "wms-receiving-parse extracts batch number, expiry date, quantity and location from pasted delivery notes or OCR text and pre-fills the receiving form." },
+  { icon: Boxes, title: "AI FEFO Putaway", desc: "wms-putaway-recommend analyses live stock to suggest the optimal pickface vs. reserve location with a 'why this location' explanation and pickface swap suggestions." },
+  { icon: Bell, title: "Expiry Alert Job", desc: "expiry-alert-job + check-expiry score every batch into Black/Red/Orange/Yellow/Green zones on a schedule, and on-demand from the Dashboard's 'Run AI Alert Job' button." },
+  { icon: TrendingUp, title: "Demand & Waste Forecast", desc: "wms-forecast predicts 7 / 14 / 30-day sell-through and write-off risk per SKU/store from stock depth and expiry pressure, with confidence scores and per-row markdown / write-off task actions." },
+  { icon: Tag, title: "AI Markdown Proposals", desc: "ai-pricing-proposal generates discount % proposals from forecast risk; one-click approval in Markdown Approvals pushes the new price live and logs the decision." },
+  { icon: ShieldAlert, title: "AI Quarantine Triage", desc: "wms-quarantine-triage scores single batches and bulk selections — RELEASE / WRITE-OFF / RETURN-TO-SUPPLIER with severity, reasoning and confidence; bulk-execute in one step." },
+  { icon: MessageSquare, title: "AI Expiry Assistant (Chat)", desc: "wms-assistant runs natural-language Q&A over live inventory, alerts and quarantine. Answers cite batch UUIDs and deep-link straight to /batch/:id." },
+  { icon: Webhook, title: "CoreERP Integration", desc: "coreerp-po-webhook ingests purchase-order events from CoreERP into Inbound Orders with retry logic and a full Webhook Log audit trail." },
 ];
 
 const ShowcaseAIFeatures = () => (
@@ -29,8 +31,8 @@ const ShowcaseAIFeatures = () => (
           AI That <span className="pp-gradient-text">Understands Inventory</span>
         </h2>
         <p className="section-subtitle mx-auto">
-          Six purpose-built AI capabilities embedded across the WMS — every recommendation
-          captured with prompts, inputs, confidence and the final user decision.
+          Eight purpose-built AI &amp; automation services embedded across the WMS — every
+          recommendation captured with prompts, inputs, confidence and the final user decision.
         </p>
       </div>
 

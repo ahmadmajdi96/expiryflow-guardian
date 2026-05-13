@@ -47,8 +47,8 @@ const modules: Module[] = [
       { icon: ShieldCheck, title: "Audit Trail", desc: "Every AI suggestion, prompt, confidence score and final user decision is logged for traceability." },
     ],
     screens: [
-      "PO Selection","Line Item Scan","Batch & Expiry Capture","Putaway Confirm","Smart Parse",
-      "Pick Requests","Pick Slip PDF","Stock Transfers","Inbound Orders","Outbound Orders","Webhook Log",
+      "Receiving & Putaway","Smart Parse","Inbound Orders","Outbound Orders",
+      "Pick Requests","Pick Slip PDF","Stock Transfers","Batch Details","Webhook Log","Stores","Products",
     ],
   },
   {
@@ -76,8 +76,8 @@ const modules: Module[] = [
       { icon: ShieldCheck, title: "Markdown Approvals", desc: "Role-based approval workflow for store managers and admins." },
     ],
     screens: [
-      "Expiry Zones","AI Forecast","Markdown Approvals","AI Chat Assistant","Write-Off Tasks",
-      "Alert Settings","Batch Details","Zone Filters","Store Drilldown","Forecast Audit Log",
+      "Dashboard","Expiry Alerts (Zones)","AI Forecast","Markdown Approvals","Write-Off Tasks",
+      "AI Expiry Assistant Chat","Alert Settings","Run AI Alert Job","Batch Details","Forecast Audit Log",
     ],
   },
   {
@@ -101,8 +101,10 @@ const modules: Module[] = [
       { icon: ShieldAlert, title: "Quarantine Management", desc: "Isolate suspect batches from sale, markdown and picking until released." },
       { icon: Sparkles, title: "AI Triage (Single & Bulk)", desc: "Recommend RELEASE / WRITE-OFF / RETURN-TO-SUPPLIER with reasoning and confidence." },
       { icon: ShieldCheck, title: "Decision Audit Log", desc: "Every AI suggestion + final human decision recorded for QA and regulator review." },
+      { icon: ShieldCheck, title: "Role-Based Access Control", desc: "Admin, Warehouse Clerk, QC Inspector and Store Manager roles enforced via RLS on every table." },
+      { icon: ClipboardCheck, title: "User Management", desc: "Admin-controlled user provisioning with per-role page and action permissions." },
     ],
-    screens: ["QC Inspection","Quarantine List","AI Triage Dialog","Bulk Triage","Decision Audit Log"],
+    screens: ["QC Inspection","Quarantine List","AI Triage Dialog","Bulk Triage","Decision Audit Log","User Management"],
   },
 ];
 
