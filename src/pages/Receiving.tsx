@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { ScanBarcode, Check, Package } from "lucide-react";
 import { Camera } from "lucide-react";
+import { Sparkles, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { getFEFOPutawaySuggestion } from "@/lib/fefo";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -39,6 +41,34 @@ const Receiving = () => {
   const [offlineCount, setOfflineCount] = useState(0);
   const [receivingScanFeedback, setReceivingScanFeedback] = useState<{ type: "success" | "error" | "warning"; msg: string } | null>(null);
   const [receivingScanAttempts, setReceivingScanAttempts] = useState(0);
+  const [smartText, setSmartText] = useState("");
+  const [smartLoading, setSmartLoading] = useState(false);
+  const [smartConfidence, setSmartConfidence] = useState<string | null>(null);
+
+  const runSmartParse = async () => {
+    if (!smartText.trim()) {
+      toast.error("Paste delivery note text or label OCR first.");
+      return;
+    }
+    setSmartLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("wms-receiving-parse", { body: { text: smartText } });
+      if (error) throw error;
+      const p = data?.parsed;
+      if (!p) throw new Error("No data extracted");
+      if (p.batchNumber) setBatchNumber(p.batchNumber);
+      if (p.expiryDate) validateShelfLife(p.expiryDate);
+      if (p.manufacturingDate) setMfgDate(p.manufacturingDate);
+      if (p.quantity != null) setReceivedQty(String(p.quantity));
+      if (p.location) setLocationScan(p.location);
+      setSmartConfidence(p.confidence);
+      toast.success(`AI extracted fields (confidence: ${p.confidence})`);
+    } catch (e: any) {
+      toast.error(e.message || "Smart parse failed");
+    } finally {
+      setSmartLoading(false);
+    }
+  };
 
   // Track online/offline status
   useState(() => {
@@ -433,6 +463,23 @@ const Receiving = () => {
               <p className="text-sm text-muted-foreground">
                 {selectedLine ? selectedLine.products?.name : "Select an item"} — mandatory fields for expiry-trackable items.
               </p>
+              {/* AI Smart Parse */}
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Sparkles className="h-4 w-4" /> Smart Parse (AI)
+                </div>
+                <p className="text-xs text-muted-foreground">Paste supplier delivery note, label OCR, or any messy text — AI will extract batch #, expiry, mfg date, qty, and location.</p>
+                <Textarea value={smartText} onChange={(e) => setSmartText(e.target.value)} placeholder="e.g. LOT 4421-A | EXP 2026/08/31 | 240 cs | Bay R-12…" rows={3} className="text-xs font-mono" />
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={runSmartParse} disabled={smartLoading}>
+                    {smartLoading ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                    {smartLoading ? "Extracting…" : "Extract with AI"}
+                  </Button>
+                  {smartConfidence && (
+                    <Badge variant="outline" className="text-[10px]">AI confidence: {smartConfidence}</Badge>
+                  )}
+                </div>
+              </div>
               {/* Barcode/QR scanner input */}
               <div className="flex gap-2 items-center p-3 rounded-lg border border-primary/30 bg-primary/5">
                 <ScanBarcode className="h-5 w-5 text-primary" />
