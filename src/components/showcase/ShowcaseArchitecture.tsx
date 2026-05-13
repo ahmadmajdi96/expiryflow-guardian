@@ -1,4 +1,5 @@
-import { Factory, Shield, FileCheck, Tablet, ArrowDown, Brain, Sparkles, Layers, ArrowRight } from "lucide-react";
+import { Boxes, AlertTriangle, ShieldAlert, ArrowDown, Brain, Sparkles, Layers, ArrowRight, Database, Cloud } from "lucide-react";
+import screenDashboard from "@/assets/screen-dashboard.png";
 
 const Pill = ({ label, colorVar = "--pp-border" }: { label: string; colorVar?: string }) => (
   <div
@@ -13,7 +14,7 @@ const Pill = ({ label, colorVar = "--pp-border" }: { label: string; colorVar?: s
   </div>
 );
 
-const FlowArrow = ({ label = "ISA-95 data flow" }: { label?: string }) => (
+const FlowArrow = ({ label }: { label: string }) => (
   <div className="flex justify-center my-4">
     <div className="flex flex-col items-center gap-1 pp-muted-text">
       <ArrowDown className="w-5 h-5 opacity-60" />
@@ -22,16 +23,15 @@ const FlowArrow = ({ label = "ISA-95 data flow" }: { label?: string }) => (
   </div>
 );
 
-const enterprise = [
-  { name: "MES", desc: "Manufacturing Execution System", icon: Factory, colorVar: "--mes-color" },
-  { name: "QMS", desc: "Quality Management System", icon: Shield, colorVar: "--qms-color" },
-  { name: "CMS", desc: "Compliance Management System", icon: FileCheck, colorVar: "--cms-color" },
+const operations = [
+  { name: "FEFO Operations", desc: "Receiving · Putaway · Picking · Transfers", icon: Boxes, colorVar: "--mes-color" },
+  { name: "Expiry Intelligence", desc: "Alerts · Forecasting · Markdowns", icon: AlertTriangle, colorVar: "--qms-color" },
+  { name: "Quality & Compliance", desc: "QC Inspection · Quarantine · Triage", icon: ShieldAlert, colorVar: "--cms-color" },
 ];
 
-const edge = [
-  { name: "MES Edge Apps", desc: "5 Operator / Supervisor / Maintenance apps", icon: Tablet, colorVar: "--mes-color" },
-  { name: "QMS Edge Apps", desc: "4 Technician / Manager / Kiosk / Auditor apps", icon: Tablet, colorVar: "--qms-color" },
-  { name: "CMS Edge Apps", desc: "4 Regulatory / Recall / Export / Sustainability apps", icon: Tablet, colorVar: "--cms-color" },
+const data = [
+  { name: "CoreERP Integration", desc: "PO/SO webhooks, inbound/outbound order sync, batch genealogy", icon: Database, colorVar: "--mes-color" },
+  { name: "Lovable Cloud Backend", desc: "Postgres + RLS, Edge Functions, realtime alerts, full audit log", icon: Cloud, colorVar: "--cms-color" },
 ];
 
 const ShowcaseArchitecture = () => (
@@ -40,19 +40,24 @@ const ShowcaseArchitecture = () => (
       <div className="text-center mb-14">
         <h2 className="section-title mb-4">System Architecture</h2>
         <p className="section-subtitle mx-auto">
-          ISA-95-aligned two-tier architecture: enterprise platforms for management,
-          lightweight edge apps on the factory floor — every layer fed by CortaneX AI.
+          A unified WMS for batch-level inventory, FEFO execution and expiry intelligence —
+          every operation enriched by CortaneX AI.
         </p>
       </div>
 
-      {/* Enterprise layer */}
+      <div className="module-card overflow-hidden mb-10">
+        <div className="p-1">
+          <img src={screenDashboard} alt="CORTA WMS live dashboard" className="w-full rounded-lg" loading="lazy" />
+        </div>
+      </div>
+
       <div className="flex items-center gap-3 mb-4">
         <div className="h-px flex-1 bg-border" />
-        <Pill label="Enterprise Layer — Strategic Management" colorVar="--mes-color" />
+        <Pill label="Operations Layer — Warehouse Execution" colorVar="--mes-color" />
         <div className="h-px flex-1 bg-border" />
       </div>
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        {enterprise.map((s) => (
+        {operations.map((s) => (
           <div key={s.name} className="data-card flex items-start gap-4">
             <div
               className="p-3 rounded-lg shrink-0"
@@ -71,9 +76,8 @@ const ShowcaseArchitecture = () => (
         ))}
       </div>
 
-      <FlowArrow />
+      <FlowArrow label="Live event stream" />
 
-      {/* AI Engine band */}
       <div className="flex items-center gap-3 mb-4">
         <div className="h-px flex-1 bg-border" />
         <Pill label="CortaneX AI Engine" colorVar="--ai-color" />
@@ -100,12 +104,12 @@ const ShowcaseArchitecture = () => (
           <div className="flex flex-wrap items-center gap-2 mb-1">
             <h3 className="font-semibold text-foreground">CortaneX AI</h3>
             <span className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full border pp-border pp-muted-text">
-              Predictive · NLP · Computer Vision
+              Forecasting · NLP · OCR · Decision Support
             </span>
           </div>
           <p className="text-sm pp-muted-text">
-            Cross-cutting intelligence: predictive maintenance, anomaly detection, smart scheduling,
-            label vision, regulatory NLP — embedded in every screen.
+            Smart Receiving · AI FEFO Putaway · Demand &amp; Waste Forecast · AI Quarantine Triage ·
+            AI Markdown Proposals · Expiry Assistant Chat — every recommendation captured in the audit log.
           </p>
         </div>
         <div className="hidden sm:flex items-center gap-1 pp-muted-text">
@@ -114,16 +118,15 @@ const ShowcaseArchitecture = () => (
         </div>
       </div>
 
-      <FlowArrow />
+      <FlowArrow label="Persistence & integration" />
 
-      {/* Edge layer */}
       <div className="flex items-center gap-3 mb-4">
         <div className="h-px flex-1 bg-border" />
-        <Pill label="Edge Layer — Factory Floor Apps" colorVar="--edge-color" />
+        <Pill label="Data & Integration Layer" colorVar="--edge-color" />
         <div className="h-px flex-1 bg-border" />
       </div>
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
-        {edge.map((s) => (
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
+        {data.map((s) => (
           <div key={s.name} className="data-card flex items-start gap-4">
             <div
               className="p-3 rounded-lg shrink-0"
@@ -144,7 +147,7 @@ const ShowcaseArchitecture = () => (
 
       <div className="mt-8 flex items-center justify-center gap-2 pp-muted-text text-xs">
         <Layers className="w-3.5 h-3.5" />
-        <span>One data model · Every event auditable · AI everywhere</span>
+        <span>One batch model · Every event auditable · AI everywhere</span>
         <ArrowRight className="w-3.5 h-3.5" />
       </div>
     </div>

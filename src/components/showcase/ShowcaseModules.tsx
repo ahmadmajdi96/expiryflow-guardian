@@ -1,12 +1,12 @@
 import {
-  Activity, Factory, Wrench, Package, Zap, BarChart3,
-  Shield, ClipboardCheck, AlertTriangle, Users, FlaskConical,
-  Scale, Leaf, Globe, Award, FileCheck,
+  PackageCheck, Truck, ArrowLeftRight, Boxes,
+  AlertTriangle, TrendingUp, Tag, Sparkles,
+  ShieldAlert, ClipboardCheck, ShieldCheck,
   TrendingDown, DollarSign, Clock, Target,
 } from "lucide-react";
-import mesDashboard from "@/assets/mes-dashboard.jpg";
-import qmsDashboard from "@/assets/qms-dashboard.jpg";
-import cmsDashboard from "@/assets/cms-dashboard.jpg";
+import screenReceiving from "@/assets/screen-receiving.png";
+import screenExpiry from "@/assets/screen-expiry-alerts.png";
+import screenQuarantine from "@/assets/screen-quarantine.png";
 
 interface Module {
   id: string;
@@ -23,86 +23,86 @@ interface Module {
 
 const modules: Module[] = [
   {
-    id: "mes",
-    title: "MES",
-    subtitle: "Manufacturing Execution System",
-    description: "Real-time production monitoring, OEE tracking, equipment management, and scheduling across all production lines.",
-    aiDescription: "AI-powered predictive maintenance forecasts equipment failures 48hrs ahead. Machine learning optimizes scheduling by analyzing historical throughput, changeover patterns, and demand signals — reducing unplanned downtime by up to 30%.",
-    image: mesDashboard,
+    id: "fefo",
+    title: "FEFO Operations",
+    subtitle: "Receiving · Putaway · Picking · Transfers",
+    description:
+      "End-to-end batch-level execution. Capture batch numbers and expiry dates at receiving, assign FEFO-aware locations, and pick the oldest stock first across every store and DC.",
+    aiDescription:
+      "Smart Receiving uses Gemini-powered OCR & NLP to parse delivery notes into structured batch + expiry + quantity data in seconds. AI Putaway analyses live stock to recommend the optimal pickface vs. reserve location and explains *why* — including swap suggestions when an outdated batch is blocking the pickface.",
+    image: screenReceiving,
     colorVar: "--mes-color",
     impact: [
-      { icon: TrendingDown, metric: "↓ 30%", label: "Downtime Reduction", description: "Predictive maintenance and AI-optimized scheduling cut unplanned stoppages." },
-      { icon: DollarSign, metric: "↓ 18%", label: "Operating Costs", description: "Energy and yield optimization across every production line." },
-      { icon: Target, metric: "↑ 25%", label: "OEE Improvement", description: "Continuous loss-tree analysis surfaces the highest-leverage interventions." },
-      { icon: Clock, metric: "↑ 40%", label: "Faster Changeovers", description: "AI sequences orders to minimize cleaning and setup time." },
+      { icon: Clock, metric: "↓ 70%", label: "Receiving Time", description: "AI parses supplier delivery notes — no manual batch keying." },
+      { icon: Target, metric: "100%", label: "FEFO Compliance", description: "AI putaway places nearest-expiry stock in the pickface automatically." },
+      { icon: TrendingDown, metric: "↓ 40%", label: "Pick Errors", description: "Batch-level pick slips with location guidance and oldest-first logic." },
+      { icon: DollarSign, metric: "↓ 25%", label: "Stock-out Risk", description: "Real-time visibility across all stores and the central DC." },
     ],
     features: [
-      { icon: Activity, title: "AI-Enhanced OEE Dashboard", desc: "Live scoring with ML anomaly detection and automated root cause suggestions for the six big losses." },
-      { icon: Factory, title: "Smart Line Management", desc: "Bottleneck detection with rebalancing actions based on real-time throughput analysis." },
-      { icon: Wrench, title: "Predictive Maintenance", desc: "Deep learning over vibration, temperature, and cycle data to predict failures before they happen." },
-      { icon: Package, title: "Intelligent Recipe Dispatch", desc: "Optimizes parameters using raw-material batch properties and historical yield data." },
-      { icon: Zap, title: "Energy Optimization AI", desc: "Neural networks recommend optimal run schedules to minimize kWh per unit." },
-      { icon: BarChart3, title: "Automated SPC Analysis", desc: "AI-driven control chart interpretation with out-of-control rule detection and corrective actions." },
+      { icon: PackageCheck, title: "Smart Receiving (AI Parse)", desc: "Paste a supplier delivery note or OCR scan — AI extracts batch, expiry, qty and location in one click." },
+      { icon: Boxes, title: "AI FEFO Putaway", desc: "AI recommends the best location with a 'why this location' explanation and pickface swap suggestions." },
+      { icon: Truck, title: "Pick Requests", desc: "FEFO-ordered pick slips with PDF export, batch numbers, and zone-coded urgency." },
+      { icon: ArrowLeftRight, title: "Stock Transfers", desc: "Inter-store transfers with full batch genealogy and expiry-aware routing." },
+      { icon: Sparkles, title: "Inbound & Outbound Orders", desc: "CoreERP-integrated PO and SO workflows with webhook event logs." },
+      { icon: ShieldCheck, title: "Audit Trail", desc: "Every AI suggestion, prompt, confidence score and final user decision is logged for traceability." },
     ],
     screens: [
-      "OEE Dashboard","Line Status","Schedule Board","Recipe Dispatch","Downtime Reasons",
-      "Maintenance Plan","Predictive Alerts","Energy Monitor","SPC Charts","Shift Reports",
-      "Batch Genealogy","Run History","Operator HMI","Andon Board","Tool Changeover",
+      "PO Selection","Line Item Scan","Batch & Expiry Capture","Putaway Confirm","Smart Parse",
+      "Pick Requests","Pick Slip PDF","Stock Transfers","Inbound Orders","Outbound Orders","Webhook Log",
     ],
   },
   {
-    id: "qms",
-    title: "QMS",
-    subtitle: "Quality Management System",
-    description: "Comprehensive food safety and quality management with CAPA workflows, HACCP monitoring, and full BRCGS/SQF audit support.",
-    aiDescription: "NLP auto-classifies complaints and deviations. AI root cause analysis accelerates investigations from weeks to days, while predictive quality models flag at-risk batches before release.",
-    image: qmsDashboard,
+    id: "expiry",
+    title: "Expiry Intelligence",
+    subtitle: "Alerts · Forecasting · Markdowns",
+    description:
+      "Live near-expiry monitoring across every store, AI-driven demand & waste forecasting, and one-click markdown proposals — turning expiry pressure into recovered margin.",
+    aiDescription:
+      "The Demand & Waste Forecast model analyses stock depth, sell-through and expiry pressure to predict 7/14/30-day write-off risk per SKU/store. Critical-risk rows generate AI markdown proposals (with calculated discount %) and write-off tasks directly from the forecast row.",
+    image: screenExpiry,
     colorVar: "--qms-color",
     impact: [
-      { icon: TrendingDown, metric: "↓ 65%", label: "Quality Failures", description: "Predictive quality flags at-risk batches before release." },
-      { icon: DollarSign, metric: "↓ 40%", label: "Waste Reduction", description: "Earlier intervention means less rework and write-off." },
-      { icon: Target, metric: "↑ 90%", label: "First-Time Audit Pass", description: "Pre-assembled clause-mapped evidence packages." },
-      { icon: Clock, metric: "↓ 75%", label: "Investigation Time", description: "AI-suggested 5-Why & Ishibawa with linked historical events." },
+      { icon: TrendingDown, metric: "↓ 45%", label: "Food Waste", description: "Predictive risk-scoring triggers markdowns before expiry hits." },
+      { icon: DollarSign, metric: "↑ 18%", label: "Margin Recovery", description: "AI-calculated discount % maximises sell-through without over-discounting." },
+      { icon: Target, metric: "5-min", label: "Alert Latency", description: "Auto-refreshing zone view across all stores." },
+      { icon: Clock, metric: "1-click", label: "Markdown Approval", description: "From forecast row to live in-store price in seconds." },
     ],
     features: [
-      { icon: Shield, title: "AI CAPA Engine", desc: "Automated root cause suggestions using 5-Why and Ishikawa analysis powered by historical deviation data and NLP." },
-      { icon: ClipboardCheck, title: "Intelligent HACCP Monitoring", desc: "Continuously validates CCP data streams and auto-triggers corrective actions on deviation patterns." },
-      { icon: AlertTriangle, title: "Predictive Complaint Analysis", desc: "ML identifies complaint clusters and predicts emerging quality trends before they escalate." },
-      { icon: Users, title: "AI Supplier Scoring", desc: "Dynamic supplier risk scoring with automated qualification workflows." },
-      { icon: FlaskConical, title: "Smart Environmental Monitoring", desc: "Optimizes EMP schedules and predicts contamination risk zones." },
+      { icon: AlertTriangle, title: "Near-Expiry Alerts", desc: "Black/Red/Orange/Yellow/Green expiry zones with auto-refresh and per-store filtering." },
+      { icon: TrendingUp, title: "AI Demand & Waste Forecast", desc: "7/14/30-day sell-through and write-off prediction per SKU/store with confidence scores." },
+      { icon: Tag, title: "AI Markdown Proposals", desc: "Generate price-reduction proposals directly from forecast rows; AI sets the discount %." },
+      { icon: Sparkles, title: "AI Expiry Assistant (Chat)", desc: "Ask natural-language questions about near-expiry stock; get batch-level answers with deep-links." },
+      { icon: AlertTriangle, title: "Write-off Tasks", desc: "Critical-risk batches auto-generate write-off tasks for store managers to action." },
+      { icon: ShieldCheck, title: "Markdown Approvals", desc: "Role-based approval workflow for store managers and admins." },
     ],
     screens: [
-      "CAPA Inbox","Deviation Log","HACCP Monitor","CCP Dashboard","Audit Schedule",
-      "Supplier Scorecard","EMP Planner","Complaint Analysis","Document Control","Training Matrix",
-      "Internal Audits","Mock Recall","Allergen Map","Calibration Log","Lab Results",
+      "Expiry Zones","AI Forecast","Markdown Approvals","AI Chat Assistant","Write-Off Tasks",
+      "Alert Settings","Batch Details","Zone Filters","Store Drilldown","Forecast Audit Log",
     ],
   },
   {
-    id: "cms",
-    title: "CMS",
-    subtitle: "Compliance Management System",
-    description: "Regulatory intelligence, certification lifecycle management, ESG reporting, and audit evidence packaging.",
-    aiDescription: "AI-driven regulatory horizon scanning monitors 50+ jurisdictions in real-time. Automated label validation uses computer vision to verify nutrition panels and allergen declarations against global regulation databases.",
-    image: cmsDashboard,
+    id: "quality",
+    title: "Quality & Compliance",
+    subtitle: "QC Inspection · Quarantine · Triage",
+    description:
+      "Inspect at receiving, isolate suspect stock in quarantine, and let AI accelerate the release/write-off decision — with a complete audit trail for every action.",
+    aiDescription:
+      "AI Quarantine Triage processes inspector notes and batch history to suggest severity, root cause and recommended action — RELEASE, WRITE-OFF, or RETURN-TO-SUPPLIER — with confidence scores. Bulk triage can score dozens of quarantined batches in parallel and execute the chosen action in one step.",
+    image: screenQuarantine,
     colorVar: "--cms-color",
     impact: [
-      { icon: TrendingDown, metric: "↓ 80%", label: "Compliance Risk", description: "Continuous regulatory horizon scanning across 50+ jurisdictions." },
-      { icon: DollarSign, metric: "↓ 50%", label: "Compliance Costs", description: "Reuse of certifications and pre-assembled evidence packs." },
-      { icon: Target, metric: "100%", label: "Label Accuracy", description: "Computer-vision artwork validation pre-print." },
-      { icon: Clock, metric: "↓ 60%", label: "Audit Prep Time", description: "AI-curated audit evidence ready in minutes, not days." },
+      { icon: Clock, metric: "↓ 80%", label: "Triage Time", description: "AI scores severity and recommends an action in seconds, not days." },
+      { icon: Target, metric: "↑ 60%", label: "Right-First-Time Releases", description: "AI surfaces historical context and similar past decisions." },
+      { icon: TrendingDown, metric: "↓ 35%", label: "Stock Locked-Up", description: "Bulk triage clears the quarantine queue faster." },
+      { icon: ShieldCheck, metric: "100%", label: "Audit Coverage", description: "Every prompt, score and decision logged in the AI audit trail." },
     ],
     features: [
-      { icon: Scale, title: "AI Regulatory Intelligence", desc: "NLP scans regulatory changes across jurisdictions with automated impact assessment on your portfolio." },
-      { icon: Award, title: "Smart Certification Tracking", desc: "Predicts audit readiness scores and auto-generates gap analysis with prioritized remediation steps." },
-      { icon: FileCheck, title: "Computer Vision Label Check", desc: "Automated artwork validation against nutrition panels, allergens, and mandatory statements." },
-      { icon: Leaf, title: "AI Carbon Footprint Calculator", desc: "ML models calculate Scope 1/2/3 product carbon footprints from supply chain data." },
-      { icon: Globe, title: "Intelligent Trade Compliance", desc: "AI-powered sanctions screening and denied-party checks with automated export documentation." },
+      { icon: ClipboardCheck, title: "QC Inspection", desc: "Capture receiving inspections with pass/fail + notes, attached to the batch." },
+      { icon: ShieldAlert, title: "Quarantine Management", desc: "Isolate suspect batches from sale, markdown and picking until released." },
+      { icon: Sparkles, title: "AI Triage (Single & Bulk)", desc: "Recommend RELEASE / WRITE-OFF / RETURN-TO-SUPPLIER with reasoning and confidence." },
+      { icon: ShieldCheck, title: "Decision Audit Log", desc: "Every AI suggestion + final human decision recorded for QA and regulator review." },
     ],
-    screens: [
-      "Regulatory Radar","Cert Lifecycle","Label Validator","ESG Dashboard","Carbon Ledger",
-      "Recall Workbench","Trade Docs","Sanctions Screen","Audit Evidence","Submission Tracker",
-      "Country Matrix","Allergen Declarations","Sustainability KPIs","Corrective Filings",
-    ],
+    screens: ["QC Inspection","Quarantine List","AI Triage Dialog","Bulk Triage","Decision Audit Log"],
   },
 ];
 
@@ -112,8 +112,8 @@ const ShowcaseModules = () => (
       <div className="text-center mb-20">
         <h2 className="section-title mb-4">Platform Modules</h2>
         <p className="section-subtitle mx-auto">
-          Each module is a fully-featured application enhanced with CortaneX AI — deployable
-          independently or as a unified suite.
+          Three integrated modules covering the full warehouse-to-shelf lifecycle —
+          every screen powered by CortaneX AI.
         </p>
       </div>
 
@@ -124,7 +124,7 @@ const ShowcaseModules = () => (
               <div className="lg:w-3/5">
                 <div className="module-card overflow-hidden">
                   <div className="p-1">
-                    <img src={mod.image} alt={`${mod.title} dashboard`} className="w-full rounded-lg" loading="lazy" />
+                    <img src={mod.image} alt={`${mod.title} screen`} className="w-full rounded-lg" loading="lazy" />
                   </div>
                 </div>
               </div>
@@ -160,7 +160,6 @@ const ShowcaseModules = () => (
               </div>
             </div>
 
-            {/* Impact metrics */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
               {mod.impact.map((m) => (
                 <div key={m.label} className="data-card text-center">
@@ -177,7 +176,6 @@ const ShowcaseModules = () => (
               ))}
             </div>
 
-            {/* Features */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
               {mod.features.map((feat) => (
                 <div key={feat.title} className="benefit-card group">
@@ -194,7 +192,6 @@ const ShowcaseModules = () => (
               ))}
             </div>
 
-            {/* Screen tags */}
             <div className="data-card">
               <h4 className="text-sm font-semibold uppercase tracking-wider pp-muted-text mb-4">Available Screens</h4>
               <div className="flex flex-wrap gap-2">

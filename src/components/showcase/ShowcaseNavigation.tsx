@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { Shield, FileCheck, Tablet, Menu, X, Factory, Brain, Workflow, Sparkles } from "lucide-react";
+import { Menu, X, Brain, Workflow, Sparkles, Boxes, AlertTriangle, ShieldAlert, Tablet } from "lucide-react";
 import cortaLogo from "@/assets/corta-logo.png";
 
 const navItems = [
   { label: "Architecture", href: "#architecture", icon: Workflow },
-  { label: "MES", href: "#mes", icon: Factory },
-  { label: "QMS", href: "#qms", icon: Shield },
-  { label: "CMS", href: "#cms", icon: FileCheck },
+  { label: "FEFO Ops", href: "#fefo", icon: Boxes },
+  { label: "Expiry AI", href: "#expiry", icon: AlertTriangle },
+  { label: "Quality", href: "#quality", icon: ShieldAlert },
   { label: "AI Engine", href: "#ai", icon: Brain },
   { label: "Benefits", href: "#benefits", icon: Sparkles },
   { label: "Standards", href: "#standards", icon: Tablet },
@@ -42,8 +42,8 @@ const ShowcaseNavigation = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 sm:h-16 flex items-center justify-between">
         <a href="#" className="flex items-center gap-2 sm:gap-3 hover-scale">
-          <img src={cortaLogo} alt="CORTA-PL" className="h-7 sm:h-8 w-auto" />
-          <span className="font-bold text-base sm:text-lg tracking-tight">CORTA-PL</span>
+          <img src={cortaLogo} alt="CORTA WMS" className="h-7 sm:h-8 w-auto" />
+          <span className="font-bold text-base sm:text-lg tracking-tight">CORTA WMS</span>
         </a>
 
         <div className="hidden md:flex items-center gap-1">

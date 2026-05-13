@@ -1,23 +1,23 @@
 const standards = [
-  { name: "ISA-95", desc: "Enterprise-Control Integration" },
-  { name: "BRCGS v9", desc: "Global Food Safety Standard" },
-  { name: "SQF", desc: "Safe Quality Food Certification" },
-  { name: "FSSC 22000", desc: "Food Safety System Certification" },
+  { name: "FEFO", desc: "First-Expired-First-Out execution" },
+  { name: "GS1", desc: "Global product & batch coding" },
+  { name: "FSMA 204", desc: "FDA Food Traceability Rule" },
   { name: "HACCP", desc: "Hazard Analysis & Critical Control" },
-  { name: "FSMA 204", desc: "FDA Traceability Rule" },
-  { name: "EU 1169/2011", desc: "Food Information Regulation" },
-  { name: "GMP", desc: "Good Manufacturing Practices" },
-  { name: "MESA-11", desc: "MES Functional Model" },
   { name: "ISO 22000", desc: "Food Safety Management" },
+  { name: "GDP", desc: "Good Distribution Practice" },
+  { name: "BRCGS", desc: "Storage & Distribution Standard" },
+  { name: "EU 1169/2011", desc: "Food Information to Consumers" },
+  { name: "RLS", desc: "Row-level security enforced" },
+  { name: "Audit Log", desc: "Full AI + user decision trail" },
 ];
 
 const ShowcaseStandards = () => (
   <section id="standards" className="py-16 sm:py-24 px-4 sm:px-6 border-t pp-border scroll-mt-20">
     <div className="max-w-6xl mx-auto">
       <div className="text-center mb-12">
-        <h2 className="section-title mb-4">Industry Standards Compliance</h2>
+        <h2 className="section-title mb-4">Standards & Compliance</h2>
         <p className="section-subtitle mx-auto">
-          Built to meet and exceed the requirements of global food safety and manufacturing standards.
+          Built to meet warehousing, food-safety and traceability requirements out of the box.
         </p>
       </div>
 

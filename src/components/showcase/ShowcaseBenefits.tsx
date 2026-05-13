@@ -1,19 +1,19 @@
 import {
-  TrendingUp, Clock, ShieldCheck, Eye, Layers, Wifi,
-  BarChart3, Lock, Zap, Globe,
+  TrendingDown, Tag, ShieldCheck, Eye, Layers, Zap,
+  BarChart3, Lock, Boxes, Sparkles,
 } from "lucide-react";
 
 const benefits = [
-  { icon: TrendingUp, title: "Increase OEE by 15–25%", description: "Real-time visibility into availability, performance, and quality losses enables targeted improvement.", colorVar: "--mes-color" },
-  { icon: Clock, title: "Reduce Downtime by 30%", description: "Predictive maintenance alerts and AI-optimized scheduling keep lines running longer.", colorVar: "--mes-color" },
-  { icon: ShieldCheck, title: "Audit-Ready in Minutes", description: "AI-assembled evidence packages with clause mapping for BRCGS, SQF, FSSC 22000.", colorVar: "--qms-color" },
-  { icon: Eye, title: "100% Traceability", description: "End-to-end lot genealogy with one-click mock recalls in under 2 hours.", colorVar: "--qms-color" },
-  { icon: Layers, title: "Unified Data Model", description: "MES, QMS, and CMS share a common backbone with AI cross-referencing.", colorVar: "--ai-color" },
-  { icon: Wifi, title: "Edge-First Architecture", description: "Purpose-built tablet apps with offline AI inference — no more paper forms.", colorVar: "--edge-color" },
-  { icon: BarChart3, title: "AI-Driven Analytics", description: "Automated SPC, trend prediction, and shift reports that turn data into decisions.", colorVar: "--ai-color" },
-  { icon: Lock, title: "Role-Based Access", description: "Intelligent access control with anomaly detection for security events.", colorVar: "--cms-color" },
-  { icon: Zap, title: "Rapid Deployment", description: "Modular architecture with AI-guided onboarding — start with MES, add modules as you grow.", colorVar: "--mes-color" },
-  { icon: Globe, title: "Multi-Site Ready", description: "AI-consolidated analytics across all facilities with site-specific optimization.", colorVar: "--cms-color" },
+  { icon: TrendingDown, title: "Cut Food Waste 40–60%", description: "Predictive expiry forecasting + AI markdowns clear stock before it spoils.", colorVar: "--qms-color" },
+  { icon: Tag, title: "Recover Margin on Near-Expiry", description: "AI-set discount % maximises sell-through without over-discounting.", colorVar: "--qms-color" },
+  { icon: Boxes, title: "100% FEFO Compliance", description: "AI putaway and oldest-first picking eliminate human FEFO errors.", colorVar: "--mes-color" },
+  { icon: Eye, title: "Full Batch Traceability", description: "Every receipt, move, pick and write-off tied to a batch ID for one-click recall.", colorVar: "--cms-color" },
+  { icon: Zap, title: "70% Faster Receiving", description: "Smart Receiving parses delivery notes — no manual batch + expiry keying.", colorVar: "--mes-color" },
+  { icon: ShieldCheck, title: "Audit-Ready by Default", description: "Every AI prompt, score and human decision logged for QA and regulators.", colorVar: "--cms-color" },
+  { icon: Layers, title: "Unified Multi-Store Model", description: "DC + every store on one batch graph — transfers, picks and alerts in real time.", colorVar: "--ai-color" },
+  { icon: Sparkles, title: "AI Copilot, Always On", description: "Floating Expiry Assistant answers stock questions with deep-links to batches.", colorVar: "--ai-color" },
+  { icon: Lock, title: "Role-Based Access", description: "Admin, Warehouse Clerk, QC Inspector and Store Manager — RLS enforced end-to-end.", colorVar: "--cms-color" },
+  { icon: BarChart3, title: "CoreERP Integrated", description: "PO/SO webhooks, automatic inbound/outbound order sync and event log.", colorVar: "--mes-color" },
 ];
 
 const ShowcaseBenefits = () => (
@@ -22,9 +22,9 @@ const ShowcaseBenefits = () => (
     <div className="relative max-w-7xl mx-auto">
       <div className="text-center mb-16">
         <h2 className="section-title mb-4">
-          Why <span className="pp-gradient-text">CORTA-PL</span>?
+          Why <span className="pp-gradient-text">CORTA WMS</span>?
         </h2>
-        <p className="section-subtitle mx-auto">Measurable impact on your production line KPIs from day one.</p>
+        <p className="section-subtitle mx-auto">Measurable impact on waste, margin and compliance from week one.</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
