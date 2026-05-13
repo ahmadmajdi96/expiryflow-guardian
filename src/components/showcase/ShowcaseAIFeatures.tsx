@@ -1,12 +1,12 @@
-import { Brain, Cpu, Eye, MessageSquare, TrendingUp, Zap } from "lucide-react";
+import { Brain, ScanText, Boxes, TrendingUp, ShieldAlert, MessageSquare, Tag } from "lucide-react";
 
 const aiFeatures = [
-  { icon: Brain, title: "Predictive Analytics Engine", desc: "Deep learning over production, quality, and compliance data forecasts failures, predicts deviations, and recommends optimal process parameters." },
-  { icon: Eye, title: "Computer Vision Inspection", desc: "AI-powered visual inspection for label compliance, defect detection on production lines, and automated GMP audit photo analysis." },
-  { icon: MessageSquare, title: "Natural Language Processing", desc: "Auto-classifies complaints, parses regulatory documents, and generates CAPA reports. Ask in plain English; get instant insights." },
-  { icon: Cpu, title: "Intelligent Automation", desc: "AI workflow orchestration auto-routes deviations, escalates critical events, and optimizes scheduling across all production lines." },
-  { icon: TrendingUp, title: "Adaptive Learning Models", desc: "Self-improving algorithms continuously learn from your operational data — predictions get more accurate the more you use the platform." },
-  { icon: Zap, title: "Real-Time Decision Support", desc: "AI copilot surfaces actionable recommendations during critical events with confidence scores and supporting evidence." },
+  { icon: ScanText, title: "Smart Receiving (OCR + NLP)", desc: "Paste a supplier delivery note or OCR text — AI extracts batch number, expiry date, qty and location and pre-fills the receiving form in seconds." },
+  { icon: Boxes, title: "AI FEFO Putaway", desc: "Recommends optimal pickface vs. reserve location based on live stock and expiry windows, with a 'why this location' explanation and pickface swap suggestions." },
+  { icon: TrendingUp, title: "Demand & Waste Forecast", desc: "Predicts 7/14/30-day sell-through and write-off risk per SKU/store using stock depth, expiry pressure and historical movement — with confidence scores." },
+  { icon: Tag, title: "AI Markdown Proposals", desc: "Generates discount % proposals from forecast risk; one-click approval pushes the new price live and logs the decision." },
+  { icon: ShieldAlert, title: "AI Quarantine Triage", desc: "Single-batch and bulk triage. Suggests RELEASE / WRITE-OFF / RETURN-TO-SUPPLIER with severity, reasoning and confidence — bulk-execute in one step." },
+  { icon: MessageSquare, title: "AI Expiry Assistant (Chat)", desc: "Natural-language Q&A over your live near-expiry inventory. Answers reference batch UUIDs and link directly to batch detail pages." },
 ];
 
 const ShowcaseAIFeatures = () => (
@@ -26,11 +26,11 @@ const ShowcaseAIFeatures = () => (
           <span className="text-sm font-medium">CortaneX AI Engine</span>
         </div>
         <h2 className="section-title mb-4">
-          AI That <span className="pp-gradient-text">Understands Manufacturing</span>
+          AI That <span className="pp-gradient-text">Understands Inventory</span>
         </h2>
         <p className="section-subtitle mx-auto">
-          Purpose-built AI models trained on manufacturing data — specialized intelligence
-          that speaks your operational language.
+          Six purpose-built AI capabilities embedded across the WMS — every recommendation
+          captured with prompts, inputs, confidence and the final user decision.
         </p>
       </div>
 
