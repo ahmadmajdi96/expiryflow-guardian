@@ -182,3 +182,89 @@
   ::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; border: 2px solid hsl(var(--background)); }
   ::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.4); }
 }
+
+/* Pixel Pulse landing — dark themed scope (outside @layer for predictable specificity) */
+.pp-dark {
+  --pp-bg: 220 25% 7%;
+  --pp-fg: 210 20% 92%;
+  --pp-card: 220 22% 11%;
+  --pp-border: 220 14% 18%;
+  --pp-muted: 220 12% 60%;
+  --pp-primary: 210 100% 60%;
+  --pp-accent: 142 71% 45%;
+  background: hsl(var(--pp-bg));
+  color: hsl(var(--pp-fg));
+}
+.pp-dark .pp-grid-pattern {
+  background-image:
+    linear-gradient(hsl(var(--pp-border) / 0.45) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--pp-border) / 0.45) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+.pp-dark .pp-hero-gradient {
+  background: radial-gradient(ellipse 80% 50% at 50% -20%, hsl(var(--pp-primary) / 0.18), transparent 60%);
+}
+.pp-dark .pp-gradient-text {
+  background-image: linear-gradient(135deg, hsl(var(--pp-primary)), hsl(var(--pp-accent)));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.pp-dark .pp-pulse-dot {
+  position: relative; display: inline-block; width: 0.625rem; height: 0.625rem; border-radius: 9999px;
+  background: hsl(var(--pp-accent));
+}
+.pp-dark .pp-pulse-dot::after {
+  content: ''; position: absolute; inset: 0; border-radius: 9999px;
+  background: hsl(var(--pp-accent)); opacity: 0.4;
+  animation: ppPing 1.8s cubic-bezier(0,0,0.2,1) infinite;
+}
+@keyframes ppPing { 75%,100% { transform: scale(2); opacity: 0; } }
+.pp-dark .pp-metric { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+.pp-dark .pp-border { border-color: hsl(var(--pp-border)); }
+.pp-dark .pp-muted-text { color: hsl(var(--pp-muted)); }
+
+/* Module color tokens for the showcase */
+.pp-dark {
+  --mes-color: 210 100% 60%;     /* MES — Blue */
+  --qms-color: 142 71% 45%;      /* QMS — Emerald */
+  --cms-color: 280 67% 60%;      /* CMS — Violet */
+  --ai-color:  200 95% 60%;      /* AI Engine */
+  --edge-color: 38 95% 60%;      /* Edge Apps */
+}
+
+/* Reusable showcase primitives */
+.pp-dark .data-card {
+  background: hsl(var(--pp-card));
+  border: 1px solid hsl(var(--pp-border));
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pp-dark .data-card:hover {
+  border-color: hsl(var(--pp-primary) / 0.4);
+  box-shadow: 0 0 24px hsl(var(--pp-primary) / 0.18);
+  transform: translateY(-2px);
+}
+.pp-dark .module-card {
+  background: hsl(var(--pp-card));
+  border: 1px solid hsl(var(--pp-border));
+  border-radius: 1rem;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pp-dark .module-card:hover {
+  border-color: hsl(var(--pp-primary) / 0.35);
+  box-shadow: 0 0 30px hsl(var(--pp-primary) / 0.15);
+}
+.pp-dark .benefit-card {
+  background: hsl(var(--pp-card) / 0.7);
+  border: 1px solid hsl(var(--pp-border));
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  backdrop-filter: blur(6px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pp-dark .benefit-card:hover { border-color: hsl(var(--pp-primary) / 0.35); }
+.pp-dark .section-title { font-size: clamp(1.875rem, 3vw, 2.5rem); font-weight: 700; letter-spacing: -0.02em; }
+.pp-dark .section-subtitle { font-size: 1.075rem; color: hsl(var(--pp-muted)); max-width: 48rem; }
+.pp-dark .hover-scale { transition: transform 0.2s ease; }
+.pp-dark .hover-scale:hover { transform: scale(1.04); }
