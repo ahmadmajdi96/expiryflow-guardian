@@ -44,6 +44,9 @@ const Receiving = () => {
   const [smartText, setSmartText] = useState("");
   const [smartLoading, setSmartLoading] = useState(false);
   const [smartConfidence, setSmartConfidence] = useState<string | null>(null);
+  const [aiPutaway, setAiPutaway] = useState<{ locationType: string; locationCode: string; whyThisLocation: string; confidence: string; swapWithBatch?: string | null } | null>(null);
+  const [aiPutawayLoading, setAiPutawayLoading] = useState(false);
+  const [aiPutawayAuditId, setAiPutawayAuditId] = useState<string | null>(null);
 
   const runSmartParse = async () => {
     if (!smartText.trim()) {
@@ -52,7 +55,7 @@ const Receiving = () => {
     }
     setSmartLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("wms-receiving-parse", { body: { text: smartText } });
+      const { data, error } = await supabase.functions.invoke("wms-receiving-parse", { body: { text: smartText, userId: user?.id } });
       if (error) throw error;
       const p = data?.parsed;
       if (!p) throw new Error("No data extracted");
@@ -240,6 +243,26 @@ const Receiving = () => {
       expiryDate
     );
     setPutawaySuggestion(suggestion);
+    setAiPutaway(null);
+    setAiPutawayAuditId(null);
+    // Fire AI recommendation in parallel (best-effort)
+    setAiPutawayLoading(true);
+    supabase.functions.invoke("wms-putaway-recommend", {
+      body: {
+        productId: selectedLine.product_id,
+        storeId: "a1000000-0000-0000-0000-000000000001",
+        incomingExpiryDate: expiryDate,
+        batchNumber: batchNumber || null,
+        quantity: Number(receivedQty) || selectedLine.quantity_ordered,
+        userId: user?.id,
+      },
+    }).then(({ data, error }) => {
+      if (error) { console.warn("AI putaway failed", error); return; }
+      if (data?.recommendation) {
+        setAiPutaway(data.recommendation);
+        setAiPutawayAuditId(data.auditId ?? null);
+      }
+    }).finally(() => setAiPutawayLoading(false));
     setStep(4);
   };
 
@@ -559,6 +582,42 @@ const Receiving = () => {
                 </p>
                 <p className="text-xs text-muted-foreground">{putawaySuggestion?.reason}</p>
                 <p className="text-xs text-muted-foreground mt-1">Scan the location barcode to confirm putaway.</p>
+              </div>
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-primary font-semibold text-sm">
+                  <Sparkles className="h-4 w-4" /> AI-Assisted FEFO Recommendation
+                  {aiPutawayLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                </div>
+                {!aiPutawayLoading && !aiPutaway && (
+                  <p className="text-xs text-muted-foreground">AI is analyzing existing batches…</p>
+                )}
+                {aiPutaway && (
+                  <>
+                    <p className="text-sm">
+                      AI suggests <span className="font-mono font-bold">{aiPutaway.locationCode}</span>{" "}
+                      <Badge variant="outline" className="text-xs ml-1">{aiPutaway.locationType}</Badge>{" "}
+                      <Badge variant="outline" className="text-[10px] ml-1">confidence {aiPutaway.confidence}</Badge>
+                    </p>
+                    {aiPutaway.swapWithBatch && (
+                      <p className="text-xs text-warning">⇄ Swap recommended: displace batch <span className="font-mono">{aiPutaway.swapWithBatch}</span> from pickface.</p>
+                    )}
+                    <div className="text-xs">
+                      <div className="text-[10px] uppercase text-muted-foreground mb-0.5">Why this location</div>
+                      {aiPutaway.whyThisLocation}
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={async () => {
+                        setLocationScan(aiPutaway.locationCode);
+                        if (aiPutawayAuditId) await supabase.from("ai_audit_log").update({ user_decision: `ACCEPTED:${aiPutaway.locationCode}`, decision_at: new Date().toISOString() }).eq("id", aiPutawayAuditId);
+                        toast.success("AI location applied");
+                      }}>Use AI location</Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={async () => {
+                        if (aiPutawayAuditId) await supabase.from("ai_audit_log").update({ user_decision: "REJECTED", decision_at: new Date().toISOString() }).eq("id", aiPutawayAuditId);
+                        toast.info("AI suggestion dismissed");
+                      }}>Dismiss</Button>
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex gap-2">
                 <Input placeholder="Scan location barcode…" className="font-mono" value={locationScan} onChange={(e) => setLocationScan(e.target.value)} />

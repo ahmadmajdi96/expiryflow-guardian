@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { batchId, inspectorNotes } = await req.json();
+    const { batchId, inspectorNotes, userId } = await req.json();
     if (!batchId) return new Response(JSON.stringify({ error: "batchId required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -75,7 +75,18 @@ ${JSON.stringify({ ...batch, daysUntilExpiry: days, recentInspections: inspectio
     const data = await response.json();
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     const triage = args ? JSON.parse(args) : null;
-    return new Response(JSON.stringify({ triage }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const { data: audit } = await supabase.from("ai_audit_log").insert({
+      feature: "QUARANTINE_TRIAGE",
+      prompt: systemPrompt,
+      input: { batchId, inspectorNotes: inspectorNotes ?? null, daysUntilExpiry: days, recentInspectionsCount: (inspections ?? []).length },
+      output: triage ?? {},
+      confidence: triage?.severity ?? null,
+      batch_id: batchId,
+      user_id: userId ?? null,
+    }).select("id").single();
+
+    return new Response(JSON.stringify({ triage, auditId: audit?.id ?? null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("wms-quarantine-triage error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
