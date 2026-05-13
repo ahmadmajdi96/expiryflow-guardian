@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_audit_log: {
+        Row: {
+          batch_id: string | null
+          confidence: string | null
+          created_at: string
+          decision_at: string | null
+          feature: string
+          id: string
+          input: Json | null
+          output: Json | null
+          prompt: string | null
+          user_decision: string | null
+          user_id: string | null
+        }
+        Insert: {
+          batch_id?: string | null
+          confidence?: string | null
+          created_at?: string
+          decision_at?: string | null
+          feature: string
+          id?: string
+          input?: Json | null
+          output?: Json | null
+          prompt?: string | null
+          user_decision?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          batch_id?: string | null
+          confidence?: string | null
+          created_at?: string
+          decision_at?: string | null
+          feature?: string
+          id?: string
+          input?: Json | null
+          output?: Json | null
+          prompt?: string | null
+          user_decision?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       alert_thresholds: {
         Row: {
           action_description: string | null
@@ -968,6 +1010,51 @@ export type Database = {
           processed_at?: string
           sku?: string | null
           status?: string
+        }
+        Relationships: []
+      }
+      write_off_tasks: {
+        Row: {
+          batch_id: string | null
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          quantity: number
+          reason: string | null
+          sku: string | null
+          source: string
+          status: string
+          store: string | null
+          updated_at: string
+        }
+        Insert: {
+          batch_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          quantity?: number
+          reason?: string | null
+          sku?: string | null
+          source?: string
+          status?: string
+          store?: string | null
+          updated_at?: string
+        }
+        Update: {
+          batch_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          quantity?: number
+          reason?: string | null
+          sku?: string | null
+          source?: string
+          status?: string
+          store?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
