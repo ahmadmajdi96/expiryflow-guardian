@@ -7,7 +7,7 @@ type Msg = { role: "user" | "assistant"; content: string };
 const ShowcaseAIChat = () => {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([
-    { role: "assistant", content: "Hi! I'm the CortaneX AI assistant. Ask me anything about CORTA-PL's manufacturing intelligence platform — MES, QMS, CMS, edge apps, or AI capabilities." },
+    { role: "assistant", content: "Hi! I'm the CortaneX AI assistant. Ask me anything about CORTA WMS — batch-level inventory, FEFO execution, expiry alerts, smart receiving, AI forecasting, quarantine triage, or markdown pricing." },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,7 +61,7 @@ const ShowcaseAIChat = () => {
             </div>
             <div>
               <div className="text-sm font-semibold">CortaneX AI Assistant</div>
-              <div className="text-[10px] text-[hsl(215,12%,50%)]">Ask about CORTA-PL platform</div>
+              <div className="text-[10px] text-[hsl(215,12%,50%)]">Ask about CORTA WMS</div>
             </div>
           </div>
 
