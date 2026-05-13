@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,11 +10,12 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { text } = await req.json();
+    const { text, userId } = await req.json();
     if (!text || typeof text !== "string") return new Response(JSON.stringify({ error: "text is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const systemPrompt = `You parse messy supplier delivery notes / batch labels / OCR output for a WMS Receiving form.
 Extract the best-guess values. If unsure, leave field null.
@@ -57,7 +59,17 @@ Return strictly via the tool.`;
     const data = await response.json();
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     const parsed = args ? JSON.parse(args) : null;
-    return new Response(JSON.stringify({ parsed }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
+    const { data: audit } = await supabase.from("ai_audit_log").insert({
+      feature: "SMART_RECEIVING",
+      prompt: systemPrompt,
+      input: { text: text.slice(0, 4000) },
+      output: parsed ?? {},
+      confidence: parsed?.confidence ?? null,
+      user_id: userId ?? null,
+    }).select("id").single();
+
+    return new Response(JSON.stringify({ parsed, auditId: audit?.id ?? null }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("wms-receiving-parse error:", e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
