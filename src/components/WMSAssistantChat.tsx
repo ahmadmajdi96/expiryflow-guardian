@@ -282,15 +282,14 @@ const WMSAssistantChat = () => {
     if (msg?.attachment?.kind !== "triage") return;
     const item = msg.attachment.items[idx];
     try {
-      const updates: Record<QCDecision, Record<string, any> | null> = {
-        RELEASE: { status: "AVAILABLE", qc_status: "PASSED" },
-        WRITE_OFF: { status: "WRITTEN_OFF", quantity: 0 },
-        RETURN_TO_SUPPLIER: { status: "RETURNED", quantity: 0 },
-        EXTEND_HOLD: null,
-        ESCALATE_TO_QA: null,
-      };
-      const upd = updates[decision];
-      if (upd) await supabase.from("inventory_batches").update(upd).eq("id", item.batchId);
+      if (decision === "RELEASE") {
+        await supabase.from("inventory_batches").update({ status: "AVAILABLE", qc_status: "PASSED" }).eq("id", item.batchId);
+      } else if (decision === "WRITE_OFF") {
+        await supabase.from("inventory_batches").update({ status: "WRITTEN_OFF", quantity: 0 }).eq("id", item.batchId);
+      } else if (decision === "RETURN_TO_SUPPLIER") {
+        await supabase.from("inventory_batches").update({ status: "RETURNED", quantity: 0 }).eq("id", item.batchId);
+      }
+      // EXTEND_HOLD and ESCALATE_TO_QA leave inventory state untouched.
 
       if (item.auditId) {
         await supabase.from("ai_audit_log").update({
