@@ -44,18 +44,53 @@ serve(async (req) => {
       products: products ?? [],
     };
 
-    const systemPrompt = `You are CORTA AI, an expert assistant embedded in the CORTA ExpirySmart WMS.
-You answer questions about inventory, near-expiry stock, FEFO, quarantine, and operations using the live snapshot below.
-Be concise (2-5 sentences), use bullet points where helpful, cite specific batch numbers/SKUs when relevant.
+    // Pre-compute store-level expiry risk ranking for context
+    const storeBuckets: Record<string, { code: string; black: number; red: number; orange: number; yellow: number; units: number; batches: number }> = {};
+    enriched.forEach((b: any) => {
+      const code = b.stores?.store_code ?? "—";
+      if (!storeBuckets[code]) storeBuckets[code] = { code, black: 0, red: 0, orange: 0, yellow: 0, units: 0, batches: 0 };
+      storeBuckets[code].batches += 1;
+      storeBuckets[code].units += b.quantity ?? 0;
+      if (b.zone === "BLACK") storeBuckets[code].black += b.quantity ?? 0;
+      else if (b.zone === "RED") storeBuckets[code].red += b.quantity ?? 0;
+      else if (b.zone === "ORANGE") storeBuckets[code].orange += b.quantity ?? 0;
+      else if (b.zone === "YELLOW") storeBuckets[code].yellow += b.quantity ?? 0;
+    });
+    const storeRisk = Object.values(storeBuckets)
+      .map((s) => ({ ...s, riskScore: s.black * 4 + s.red * 2 + s.orange * 1 }))
+      .sort((a, b) => b.riskScore - a.riskScore);
 
-ACTIONABLE LINKS — when you mention a specific batch, ALWAYS render it as a markdown link to /batch/{id}, e.g. [B240501-001](/batch/<uuid>).
-Also surface relevant page links when useful:
-- Quarantine triage → [Quarantine](/quarantine)
+    const topRiskBatches = [...enriched]
+      .filter((b: any) => ["BLACK", "RED", "ORANGE"].includes(b.zone) && (b.quantity ?? 0) > 0)
+      .sort((a: any, b: any) => a.daysLeft - b.daysLeft)
+      .slice(0, 20);
+
+    (context as any).storeRiskRanking = storeRisk;
+    (context as any).topRiskBatches = topRiskBatches;
+
+    const systemPrompt = `You are CORTA AI, an expert assistant embedded in the CORTA WMS.
+You answer questions about inventory, near-expiry stock, FEFO putaway, FEFO picking, quarantine, smart receiving, and markdown pricing using the live snapshot below.
+Be concise (2-6 sentences), use bullet points / small tables where helpful, cite specific batch numbers, SKUs and store codes.
+
+EXPIRY RISK RANKINGS — when asked for "risk ranking" / "which stores" / "which batches expire first", use the precomputed \`storeRiskRanking\` (sorted, BLACK weighted x4, RED x2, ORANGE x1) and \`topRiskBatches\` (FEFO order). Render a compact ranked list and ALWAYS link batches to /batch/{id} and stores to [Expiry Alerts](/expiry-alerts).
+
+FEFO PICKING — for "picking plan" / "what to pick first" questions, output a numbered FEFO plan from the earliest-expiry AVAILABLE / qc_status=PASSED batches, including batch, qty, location, days-left and store.
+
+PUTAWAY — for "where to put away" / "putaway suggestion" questions, recommend PICKFACE for batches whose expiry is earlier than the current pickface batch for that SKU/store, RESERVE otherwise. Explain in one sentence citing the comparison.
+
+MARKDOWN — when asked for markdown recommendations, suggest discount tiers tied to zones (YELLOW 10–15%, ORANGE 25–35%, RED 40–60%, BLACK pull-from-sale) and ALWAYS include an explainable rationale citing days-left, quantity-at-risk and current_price. Mention that approvals are applied at [Markdown Approvals](/markdown-approvals).
+
+QUARANTINE / QC — for "should I release / hold / write-off" questions, suggest one of RELEASE / EXTEND_HOLD / WRITE_OFF / RETURN_TO_SUPPLIER / ESCALATE_TO_QA, cite the batch, and add a link to [Quarantine](/quarantine).
+
+ACTIONABLE LINKS — when you mention a specific batch, ALWAYS render it as a markdown link to /batch/{id}. Surface page links when useful:
+- Receiving → [Receiving](/receiving)
+- Quarantine → [Quarantine](/quarantine)
 - Markdown approvals → [Markdown Approvals](/markdown-approvals)
 - Expiry alerts → [Expiry Alerts](/expiry-alerts)
 - Forecast → [Forecast](/forecast)
+- Pick requests → [Pick Requests](/pick-requests)
 
-End answers about near-expiry stock with one or two **recommended actions** (e.g. "Propose markdown", "Move to PICKFACE", "Create write-off task") tied to specific batches.
+End answers about near-expiry stock with 1–2 **recommended actions** tied to specific batches.
 If asked about something outside the snapshot, say so and suggest a screen to check.
 
 LIVE DATA SNAPSHOT (JSON):
